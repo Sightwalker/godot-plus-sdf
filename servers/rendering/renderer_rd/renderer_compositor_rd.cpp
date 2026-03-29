@@ -176,6 +176,7 @@ void RendererCompositorRD::finalize() {
 	memdelete(canvas);
 	memdelete(fog);
 	memdelete(particles_storage);
+	memdelete(sdf_storage);
 	memdelete(light_storage);
 	memdelete(mesh_storage);
 	memdelete(material_storage);
@@ -366,6 +367,7 @@ RendererCompositorRD::RendererCompositorRD() {
 	mesh_storage = memnew(RendererRD::MeshStorage);
 	light_storage = memnew(RendererRD::LightStorage);
 	particles_storage = memnew(RendererRD::ParticlesStorage);
+	sdf_storage = memnew(RendererRD::SDFStorage);
 	fog = memnew(RendererRD::Fog);
 	canvas = memnew(RendererCanvasRenderRD());
 	texture_storage->_tex_blit_shader_initialize();

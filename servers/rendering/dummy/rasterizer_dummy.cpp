@@ -39,6 +39,7 @@
 #include "servers/rendering/dummy/storage/material_storage.h"
 #include "servers/rendering/dummy/storage/mesh_storage.h"
 #include "servers/rendering/dummy/storage/particles_storage.h"
+#include "servers/rendering/dummy/storage/sdf_storage.h"
 #include "servers/rendering/dummy/storage/texture_storage.h"
 #include "servers/rendering/dummy/storage/utilities.h"
 
@@ -76,6 +77,9 @@ RendererParticlesStorage *RasterizerDummy::get_particles_storage() {
 RendererTextureStorage *RasterizerDummy::get_texture_storage() {
 	return texture_storage;
 }
+RendererSDFStorage *RasterizerDummy::get_sdf_storage() {
+	return sdf_storage;
+}
 RendererUtilities *RasterizerDummy::get_utilities() {
 	return utilities;
 }
@@ -90,6 +94,7 @@ RasterizerDummy::RasterizerDummy() {
 	material_storage = memnew(RendererDummy::MaterialStorage);
 	mesh_storage = memnew(RendererDummy::MeshStorage);
 	particles_storage = memnew(RendererDummy::ParticlesStorage);
+	sdf_storage = memnew(RendererDummy::SDFStorage);
 	texture_storage = memnew(RendererDummy::TextureStorage);
 	utilities = memnew(RendererDummy::Utilities);
 }
@@ -104,6 +109,7 @@ RasterizerDummy::~RasterizerDummy() {
 	memdelete(material_storage);
 	memdelete(mesh_storage);
 	memdelete(particles_storage);
+	memdelete(sdf_storage);
 	memdelete(texture_storage);
 	memdelete(utilities);
 }

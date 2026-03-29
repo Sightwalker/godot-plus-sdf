@@ -600,6 +600,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 		switch (instance->base_type) {
 			case RSE::INSTANCE_MESH:
 			case RSE::INSTANCE_MULTIMESH:
+			case RSE::INSTANCE_SDF_OBJECT:
 			case RSE::INSTANCE_PARTICLES: {
 				InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(instance->base_data);
 				scene_render->geometry_instance_free(geom->geometry_instance);
@@ -718,6 +719,7 @@ void RendererSceneCull::instance_set_base(RID p_instance, RID p_base) {
 			} break;
 			case RSE::INSTANCE_MESH:
 			case RSE::INSTANCE_MULTIMESH:
+			case RSE::INSTANCE_SDF_OBJECT:
 			case RSE::INSTANCE_PARTICLES: {
 				InstanceGeometryData *geom = memnew(InstanceGeometryData);
 				instance->base_data = geom;
@@ -1784,6 +1786,7 @@ void RendererSceneCull::_update_instance(Instance *p_instance) const {
 		switch (p_instance->base_type) {
 			case RSE::INSTANCE_MESH:
 			case RSE::INSTANCE_MULTIMESH:
+			case RSE::INSTANCE_SDF_OBJECT:
 			case RSE::INSTANCE_PARTICLES: {
 				InstanceGeometryData *geom = static_cast<InstanceGeometryData *>(p_instance->base_data);
 				idata.instance_geometry = geom->geometry_instance;
@@ -2007,6 +2010,14 @@ void RendererSceneCull::_update_instance_aabb(Instance *p_instance) const {
 				new_aabb = *p_instance->custom_aabb;
 			} else {
 				new_aabb = RSG::mesh_storage->multimesh_get_aabb(p_instance->base);
+			}
+
+		} break;
+		case RSE::INSTANCE_SDF_OBJECT: {
+			if (p_instance->custom_aabb) {
+				new_aabb = *p_instance->custom_aabb;
+			} else {
+				new_aabb = RSG::sdf_storage->sdf_object_get_bounds(p_instance->base);
 			}
 
 		} break;

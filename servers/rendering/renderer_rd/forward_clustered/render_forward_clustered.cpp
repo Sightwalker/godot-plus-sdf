@@ -47,6 +47,14 @@ using namespace RendererSceneRenderImplementation;
 
 #define FADE_ALPHA_PASS_THRESHOLD 0.999
 
+static _FORCE_INLINE_ void _store_projection_matrix(const Projection &p_projection, float *r_array) {
+	for (int i = 0; i < 4; i++) {
+		for (int j = 0; j < 4; j++) {
+			r_array[i * 4 + j] = p_projection.columns[i][j];
+		}
+	}
+}
+
 void RenderForwardClustered::RenderBufferDataForwardClustered::ensure_specular() {
 	ERR_FAIL_NULL(render_buffers);
 
@@ -1677,6 +1685,146 @@ void RenderForwardClustered::_process_sss(Ref<RenderSceneBuffersRD> p_render_buf
 	}
 }
 
+void RenderForwardClustered::_render_sdf_objects(const RenderDataRD *p_render_data, RID p_framebuffer) {
+	if (p_framebuffer.is_null()) {
+		return;
+	}
+	if (p_render_data->scene_data->view_count > 1) {
+		if (!sdf_object_pass.warned_multiview) {
+			WARN_PRINT_ONCE("SDFObject3D renderer currently supports a single view only. Skipping SDF draw in multiview.");
+			sdf_object_pass.warned_multiview = true;
+		}
+		return;
+	}
+	ERR_FAIL_NULL(RSG::sdf_storage);
+
+	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
+	ERR_FAIL_NULL(uniform_set_cache);
+
+	RID shader = sdf_object_pass.shader.version_get_shader(sdf_object_pass.shader_version, 0);
+	if (shader.is_null()) {
+		return;
+	}
+
+	Projection correction;
+	correction.set_depth_correction(p_render_data->scene_data->flip_y);
+	correction.add_jitter_offset(p_render_data->scene_data->taa_jitter);
+
+	Projection projection = correction * p_render_data->scene_data->view_projection[0];
+	Projection view_projection = projection * Projection(p_render_data->scene_data->cam_transform.affine_inverse());
+	Projection inv_projection = projection.inverse();
+	const Transform3D &inv_view = p_render_data->scene_data->cam_transform;
+
+	RD::FramebufferFormatID fb_format = RD::get_singleton()->framebuffer_get_format(p_framebuffer);
+	RID pipeline = sdf_object_pass.pipeline.get_render_pipeline(RD::INVALID_ID, fb_format);
+	if (pipeline.is_null()) {
+		return;
+	}
+
+	bool draw_list_started = false;
+	RD::DrawListID draw_list = 0;
+
+	for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
+		const GeometryInstanceForwardClustered *ginstance = static_cast<const GeometryInstanceForwardClustered *>((*p_render_data->instances)[i]);
+		if (ginstance->data->base_type != RSE::INSTANCE_SDF_OBJECT) {
+			continue;
+		}
+
+		const RID sdf_object = ginstance->data->base;
+		const uint32_t shape_count = RSG::sdf_storage->sdf_object_get_shape_count(sdf_object);
+		if (shape_count == 0) {
+			continue;
+		}
+
+		const RID int_buffer = RSG::sdf_storage->sdf_object_get_compiled_int_buffer(sdf_object);
+		const RID float_buffer = RSG::sdf_storage->sdf_object_get_compiled_float_buffer(sdf_object);
+		if (int_buffer.is_null() || float_buffer.is_null()) {
+			continue;
+		}
+
+		const AABB bounds = RSG::sdf_storage->sdf_object_get_bounds(sdf_object);
+		if (!bounds.is_finite()) {
+			continue;
+		}
+
+		const RSE::SDFRenderMode render_mode = RSG::sdf_storage->sdf_object_get_render_mode(sdf_object);
+		const float lod_factor = CLAMP(ginstance->depth / 80.0f, 0.0f, 1.0f);
+		int base_steps = 96;
+		switch (render_mode) {
+			case RSE::SDF_RENDER_MODE_STATIC:
+				base_steps = 128;
+				break;
+			case RSE::SDF_RENDER_MODE_DYNAMIC:
+				base_steps = 96;
+				break;
+			case RSE::SDF_RENDER_MODE_CHARACTER:
+				base_steps = 112;
+				break;
+			default:
+				break;
+		}
+		const uint32_t max_steps = uint32_t(MAX(int(Math::lerp((float)base_steps, (float)MAX(base_steps / 2, 24), lod_factor)), 16));
+
+		_store_projection_matrix(view_projection, sdf_object_pass.uniform_data.view_projection);
+		_store_projection_matrix(inv_projection, sdf_object_pass.uniform_data.inv_projection);
+		RendererRD::MaterialStorage::store_transform(inv_view, sdf_object_pass.uniform_data.inv_view);
+		RendererRD::MaterialStorage::store_transform(ginstance->transform, sdf_object_pass.uniform_data.object_to_world);
+		RendererRD::MaterialStorage::store_transform(ginstance->transform.affine_inverse(), sdf_object_pass.uniform_data.world_to_object);
+
+		const Vector3 bmin = bounds.position;
+		const Vector3 bmax = bounds.position + bounds.size;
+		sdf_object_pass.uniform_data.bounds_min[0] = bmin.x;
+		sdf_object_pass.uniform_data.bounds_min[1] = bmin.y;
+		sdf_object_pass.uniform_data.bounds_min[2] = bmin.z;
+		sdf_object_pass.uniform_data.bounds_min[3] = 0.0f;
+		sdf_object_pass.uniform_data.bounds_max[0] = bmax.x;
+		sdf_object_pass.uniform_data.bounds_max[1] = bmax.y;
+		sdf_object_pass.uniform_data.bounds_max[2] = bmax.z;
+		sdf_object_pass.uniform_data.bounds_max[3] = 0.0f;
+
+		sdf_object_pass.uniform_data.data_info[0] = shape_count;
+		sdf_object_pass.uniform_data.data_info[1] = max_steps;
+		sdf_object_pass.uniform_data.data_info[2] = uint32_t(render_mode);
+		sdf_object_pass.uniform_data.data_info[3] = 0;
+
+		sdf_object_pass.uniform_data.march_info[0] = Math::lerp(0.0008f, 0.003f, lod_factor);
+		sdf_object_pass.uniform_data.march_info[1] = 0.0005f;
+		sdf_object_pass.uniform_data.march_info[2] = 0.95f;
+		sdf_object_pass.uniform_data.march_info[3] = Math::lerp(1.0f, 4.0f, lod_factor);
+
+		RD::get_singleton()->buffer_update(sdf_object_pass.uniform_buffer, 0, sizeof(SDFObjectPass::UniformData), &sdf_object_pass.uniform_data);
+
+		RD::Uniform u_params;
+		u_params.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+		u_params.binding = 0;
+		u_params.append_id(sdf_object_pass.uniform_buffer);
+
+		RD::Uniform u_int_buffer;
+		u_int_buffer.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u_int_buffer.binding = 0;
+		u_int_buffer.append_id(int_buffer);
+
+		RD::Uniform u_float_buffer;
+		u_float_buffer.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+		u_float_buffer.binding = 1;
+		u_float_buffer.append_id(float_buffer);
+
+		if (!draw_list_started) {
+			draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0);
+			RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline);
+			draw_list_started = true;
+		}
+
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 0, u_params), 0);
+		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_int_buffer, u_float_buffer), 1);
+		RD::get_singleton()->draw_list_draw(draw_list, false, 1u, 3u);
+	}
+
+	if (draw_list_started) {
+		RD::get_singleton()->draw_list_end();
+	}
+}
+
 void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) {
 	scene_state.used_uniform_buffer_count = 0;
 
@@ -2224,6 +2372,11 @@ void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Co
 			RD::get_singleton()->draw_command_end_label();
 		}
 	}
+
+	RENDER_TIMESTAMP("Render SDF Objects");
+	RD::get_singleton()->draw_command_begin_label("Render SDF Objects");
+	_render_sdf_objects(p_render_data, color_only_framebuffer);
+	RD::get_singleton()->draw_command_end_label();
 
 	{
 		if (ce_post_opaque_resolved_color) {
@@ -4330,6 +4483,14 @@ void RenderForwardClustered::_geometry_instance_update(RenderGeometryInstance *p
 			ginstance->instance_count = particles_storage->particles_get_amount(ginstance->data->base, ginstance->trail_steps);
 
 		} break;
+		case RSE::INSTANCE_SDF_OBJECT: {
+			// SDF objects are drawn in the dedicated full-screen raymarch pass.
+			// They do not contribute regular mesh surfaces to this render list.
+			ginstance->instance_count = 0;
+			if (ginstance->data->dirty_dependencies) {
+				RSG::utilities->base_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+			}
+		} break;
 
 		default: {
 		}
@@ -5128,6 +5289,30 @@ RenderForwardClustered::RenderForwardClustered() {
 		RD::get_singleton()->compute_list_end();
 	}
 
+	/* SDF Object Pass */
+	{
+		Vector<String> modes;
+		modes.push_back("\n");
+		sdf_object_pass.shader.initialize(modes);
+		sdf_object_pass.shader_version = sdf_object_pass.shader.version_create();
+
+		RD::PipelineDepthStencilState depth_stencil;
+		depth_stencil.enable_depth_test = true;
+		depth_stencil.depth_compare_operator = RD::COMPARE_OP_GREATER_OR_EQUAL;
+		depth_stencil.enable_depth_write = true;
+
+		sdf_object_pass.pipeline.setup(
+				sdf_object_pass.shader.version_get_shader(sdf_object_pass.shader_version, 0),
+				RD::RENDER_PRIMITIVE_TRIANGLES,
+				RD::PipelineRasterizationState(),
+				RD::PipelineMultisampleState(),
+				depth_stencil,
+				RD::PipelineColorBlendState::create_disabled(),
+				0);
+
+		sdf_object_pass.uniform_buffer = RD::get_singleton()->uniform_buffer_create(sizeof(SDFObjectPass::UniformData));
+	}
+
 	_update_shader_quality_settings();
 	_update_global_pipeline_data_requirements_from_project();
 
@@ -5178,6 +5363,12 @@ RenderForwardClustered::~RenderForwardClustered() {
 	RD::get_singleton()->free_rid(dfg_lut.pipeline);
 	RD::get_singleton()->free_rid(dfg_lut.texture);
 	dfg_lut.shader.version_free(dfg_lut.shader_version);
+
+	sdf_object_pass.pipeline.clear();
+	if (sdf_object_pass.uniform_buffer.is_valid()) {
+		RD::get_singleton()->free_rid(sdf_object_pass.uniform_buffer);
+	}
+	sdf_object_pass.shader.version_free(sdf_object_pass.shader_version);
 
 	{
 		for (const RID &rid : scene_state.uniform_buffers) {

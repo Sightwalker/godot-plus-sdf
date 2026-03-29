@@ -39,6 +39,7 @@
 #include "drivers/gles3/storage/material_storage.h"
 #include "drivers/gles3/storage/mesh_storage.h"
 #include "drivers/gles3/storage/particles_storage.h"
+#include "drivers/gles3/storage/sdf_storage.h"
 #include "drivers/gles3/storage/texture_storage.h"
 
 #ifdef GL_API_ENABLED
@@ -155,6 +156,8 @@ RSE::InstanceType Utilities::get_base_type(RID p_rid) const {
 		return RSE::INSTANCE_MESH;
 	} else if (GLES3::MeshStorage::get_singleton()->owns_multimesh(p_rid)) {
 		return RSE::INSTANCE_MULTIMESH;
+	} else if (GLES3::SDFStorage::get_singleton()->owns_sdf_object(p_rid)) {
+		return RSE::INSTANCE_SDF_OBJECT;
 	} else if (GLES3::LightStorage::get_singleton()->owns_light(p_rid)) {
 		return RSE::INSTANCE_LIGHT;
 	} else if (GLES3::LightStorage::get_singleton()->owns_lightmap(p_rid)) {
@@ -192,6 +195,9 @@ bool Utilities::free(RID p_rid) {
 		return true;
 	} else if (GLES3::MeshStorage::get_singleton()->owns_multimesh(p_rid)) {
 		GLES3::MeshStorage::get_singleton()->multimesh_free(p_rid);
+		return true;
+	} else if (GLES3::SDFStorage::get_singleton()->owns_sdf_object(p_rid)) {
+		GLES3::SDFStorage::get_singleton()->sdf_object_free(p_rid);
 		return true;
 	} else if (GLES3::MeshStorage::get_singleton()->owns_mesh_instance(p_rid)) {
 		GLES3::MeshStorage::get_singleton()->mesh_instance_free(p_rid);
@@ -243,6 +249,9 @@ void Utilities::base_update_dependency(RID p_base, DependencyTracker *p_instance
 		if (multimesh->mesh.is_valid()) {
 			base_update_dependency(multimesh->mesh, p_instance);
 		}
+	} else if (SDFStorage::get_singleton()->owns_sdf_object(p_base)) {
+		Dependency *dependency = SDFStorage::get_singleton()->sdf_object_get_dependency(p_base);
+		p_instance->update_dependency(dependency);
 	} else if (LightStorage::get_singleton()->owns_reflection_probe(p_base)) {
 		Dependency *dependency = LightStorage::get_singleton()->reflection_probe_get_dependency(p_base);
 		p_instance->update_dependency(dependency);

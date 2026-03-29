@@ -56,6 +56,9 @@ RasterizerSceneGLES3 *RasterizerSceneGLES3::singleton = nullptr;
 RenderGeometryInstance *RasterizerSceneGLES3::geometry_instance_create(RID p_base) {
 	RSE::InstanceType type = RSG::utilities->get_base_type(p_base);
 	ERR_FAIL_COND_V(!((1 << type) & RSE::INSTANCE_GEOMETRY_MASK), nullptr);
+	if (type == RSE::INSTANCE_SDF_OBJECT) {
+		WARN_PRINT_ONCE("SDFObject3D runtime rendering is unsupported in the Compatibility renderer. SDF data is kept only for compile/runtime compatibility.");
+	}
 
 	GeometryInstanceGLES3 *ginstance = geometry_instance_alloc.alloc();
 	ginstance->data = memnew(GeometryInstanceGLES3::Data);
@@ -460,6 +463,12 @@ void RasterizerSceneGLES3::_geometry_instance_update(RenderGeometryInstance *p_g
 			}
 
 			ginstance->instance_count = particles_storage->particles_get_amount(ginstance->data->base);
+		} break;
+		case RSE::INSTANCE_SDF_OBJECT: {
+			ginstance->instance_count = 0;
+			if (ginstance->data->dirty_dependencies) {
+				RSG::utilities->base_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+			}
 		} break;
 
 		default: {

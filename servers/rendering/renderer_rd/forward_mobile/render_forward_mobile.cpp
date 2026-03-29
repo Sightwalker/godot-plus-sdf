@@ -2597,6 +2597,9 @@ void RenderForwardMobile::_render_list_template(RenderingDevice::DrawListID p_dr
 RenderGeometryInstance *RenderForwardMobile::geometry_instance_create(RID p_base) {
 	RSE::InstanceType type = RSG::utilities->get_base_type(p_base);
 	ERR_FAIL_COND_V(!((1 << type) & RSE::INSTANCE_GEOMETRY_MASK), nullptr);
+	if (type == RSE::INSTANCE_SDF_OBJECT) {
+		WARN_PRINT_ONCE("SDFObject3D rendering is only supported by the Forward+ renderer. Mobile keeps SDF objects compile-safe but non-rendered.");
+	}
 
 	GeometryInstanceForwardMobile *ginstance = geometry_instance_alloc.alloc();
 	ginstance->data = memnew(GeometryInstanceForwardMobile::Data);
@@ -3028,6 +3031,12 @@ void RenderForwardMobile::_geometry_instance_update(RenderGeometryInstance *p_ge
 
 			ginstance->instance_count = particles_storage->particles_get_amount(ginstance->data->base, ginstance->trail_steps);
 
+		} break;
+		case RSE::INSTANCE_SDF_OBJECT: {
+			ginstance->instance_count = 0;
+			if (ginstance->data->dirty_dependencies) {
+				RSG::utilities->base_update_dependency(ginstance->data->base, &ginstance->data->dependency_tracker);
+			}
 		} break;
 
 		default: {

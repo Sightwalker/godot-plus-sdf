@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_server_globals.h                                            */
+/*  sdf_material_3d.h                                                     */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,43 +30,44 @@
 
 #pragma once
 
-#include "servers/rendering/environment/renderer_fog.h"
-#include "servers/rendering/environment/renderer_gi.h"
-#include "servers/rendering/storage/camera_attributes_storage.h"
-#include "servers/rendering/storage/light_storage.h"
-#include "servers/rendering/storage/material_storage.h"
-#include "servers/rendering/storage/mesh_storage.h"
-#include "servers/rendering/storage/particles_storage.h"
-#include "servers/rendering/storage/sdf_storage.h"
-#include "servers/rendering/storage/texture_storage.h"
-#include "servers/rendering/storage/utilities.h"
+#include "scene/resources/material.h"
 
-class RendererCompositor;
-class RendererCanvasCull;
-class RendererCanvasRender;
-class RendererViewport;
-class RenderingMethod;
+class SDFMaterial3D : public Resource {
+	GDCLASS(SDFMaterial3D, Resource);
 
-class RenderingServerGlobals {
+	Ref<Material> shading_material;
+	Color albedo = Color(1, 1, 1, 1);
+	Color emission = Color(0, 0, 0, 1);
+	float emission_energy = 1.0f;
+	float metallic = 0.0f;
+	float roughness = 1.0f;
+	float alpha = 1.0f;
+
+protected:
+	static void _bind_methods();
+
 public:
-	static inline bool threaded = false;
+	void set_shading_material(const Ref<Material> &p_material);
+	Ref<Material> get_shading_material() const;
 
-	static inline RendererUtilities *utilities = nullptr;
-	static inline RendererLightStorage *light_storage = nullptr;
-	static inline RendererMaterialStorage *material_storage = nullptr;
-	static inline RendererMeshStorage *mesh_storage = nullptr;
-	static inline RendererParticlesStorage *particles_storage = nullptr;
-	static inline RendererTextureStorage *texture_storage = nullptr;
-	static inline RendererSDFStorage *sdf_storage = nullptr;
-	static inline RendererGI *gi = nullptr;
-	static inline RendererFog *fog = nullptr;
-	static inline RendererCameraAttributes *camera_attributes = nullptr;
-	static inline RendererCanvasRender *canvas_render = nullptr;
-	static inline RendererCompositor *rasterizer = nullptr;
+	void set_albedo(const Color &p_color);
+	Color get_albedo() const;
 
-	static inline RendererCanvasCull *canvas = nullptr;
-	static inline RendererViewport *viewport = nullptr;
-	static inline RenderingMethod *scene = nullptr;
+	void set_emission(const Color &p_color);
+	Color get_emission() const;
+
+	void set_emission_energy(float p_energy);
+	float get_emission_energy() const;
+
+	void set_metallic(float p_metallic);
+	float get_metallic() const;
+
+	void set_roughness(float p_roughness);
+	float get_roughness() const;
+
+	void set_alpha(float p_alpha);
+	float get_alpha() const;
+
+	RID get_material_rid() const;
 };
 
-#define RSG RenderingServerGlobals

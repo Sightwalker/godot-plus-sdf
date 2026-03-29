@@ -41,6 +41,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/material_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/sdf_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/utilities.h"
 #include "servers/rendering/renderer_rd/uniform_set_cache_rd.h"
@@ -59,6 +60,7 @@ protected:
 	RendererRD::MeshStorage *mesh_storage = nullptr;
 	RendererRD::ParticlesStorage *particles_storage = nullptr;
 	RendererRD::TextureStorage *texture_storage = nullptr;
+	RendererRD::SDFStorage *sdf_storage = nullptr;
 	RendererRD::Utilities *utilities = nullptr;
 
 	enum BlitMode {
@@ -124,6 +126,7 @@ public:
 	virtual RendererMeshStorage *get_mesh_storage() override { return mesh_storage; }
 	virtual RendererParticlesStorage *get_particles_storage() override { return particles_storage; }
 	virtual RendererTextureStorage *get_texture_storage() override { return texture_storage; }
+	virtual RendererSDFStorage *get_sdf_storage() override { return sdf_storage; }
 	virtual RendererGI *get_gi() override {
 		ERR_FAIL_NULL_V(scene, nullptr);
 		return scene->get_gi();

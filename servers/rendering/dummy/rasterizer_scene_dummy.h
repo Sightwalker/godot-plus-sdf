@@ -85,6 +85,9 @@ public:
 	RenderGeometryInstance *geometry_instance_create(RID p_base) override {
 		RSE::InstanceType type = RendererDummy::Utilities::get_singleton()->get_base_type(p_base);
 		ERR_FAIL_COND_V(!((1 << type) & RSE::INSTANCE_GEOMETRY_MASK), nullptr);
+		if (type == RSE::INSTANCE_SDF_OBJECT) {
+			WARN_PRINT_ONCE("SDFObject3D is not rendered by the Dummy renderer; this path exists only for compile/runtime compatibility.");
+		}
 
 		GeometryInstanceDummy *ginstance = geometry_instance_alloc.alloc();
 

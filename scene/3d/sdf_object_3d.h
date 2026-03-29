@@ -1,5 +1,5 @@
 /**************************************************************************/
-/*  rendering_server_globals.h                                            */
+/*  sdf_object_3d.h                                                       */
 /**************************************************************************/
 /*                         This file is part of:                          */
 /*                             GODOT ENGINE                               */
@@ -30,43 +30,46 @@
 
 #pragma once
 
-#include "servers/rendering/environment/renderer_fog.h"
-#include "servers/rendering/environment/renderer_gi.h"
-#include "servers/rendering/storage/camera_attributes_storage.h"
-#include "servers/rendering/storage/light_storage.h"
-#include "servers/rendering/storage/material_storage.h"
-#include "servers/rendering/storage/mesh_storage.h"
-#include "servers/rendering/storage/particles_storage.h"
-#include "servers/rendering/storage/sdf_storage.h"
-#include "servers/rendering/storage/texture_storage.h"
-#include "servers/rendering/storage/utilities.h"
+#include "scene/3d/visual_instance_3d.h"
+#include "scene/resources/sdf_material_3d.h"
 
-class RendererCompositor;
-class RendererCanvasCull;
-class RendererCanvasRender;
-class RendererViewport;
-class RenderingMethod;
+class SDFShape3D;
 
-class RenderingServerGlobals {
+class SDFObject3D : public GeometryInstance3D {
+	GDCLASS(SDFObject3D, GeometryInstance3D);
+
+	friend class SDFShape3D;
+
+private:
+	RID sdf_object;
+	Ref<SDFMaterial3D> sdf_material;
+	RSE::SDFRenderMode render_mode = RSE::SDF_RENDER_MODE_STATIC;
+	bool rebuild_queued = false;
+
+	AABB cached_aabb = AABB(Vector3(-0.05, -0.05, -0.05), Vector3(0.1, 0.1, 0.1));
+	int cached_shape_count = 0;
+
+	void _collect_shapes_recursive(Node *p_root, Vector<SDFShape3D *> &r_shapes) const;
+	void _rebuild_compiled_data();
+	void _rebuild_compiled_data_deferred();
+	void _sdf_material_changed();
+
+protected:
+	static void _bind_methods();
+	void _notification(int p_what);
+
 public:
-	static inline bool threaded = false;
+	void _request_rebuild_from_child();
 
-	static inline RendererUtilities *utilities = nullptr;
-	static inline RendererLightStorage *light_storage = nullptr;
-	static inline RendererMaterialStorage *material_storage = nullptr;
-	static inline RendererMeshStorage *mesh_storage = nullptr;
-	static inline RendererParticlesStorage *particles_storage = nullptr;
-	static inline RendererTextureStorage *texture_storage = nullptr;
-	static inline RendererSDFStorage *sdf_storage = nullptr;
-	static inline RendererGI *gi = nullptr;
-	static inline RendererFog *fog = nullptr;
-	static inline RendererCameraAttributes *camera_attributes = nullptr;
-	static inline RendererCanvasRender *canvas_render = nullptr;
-	static inline RendererCompositor *rasterizer = nullptr;
+	void set_sdf_material(const Ref<SDFMaterial3D> &p_material);
+	Ref<SDFMaterial3D> get_sdf_material() const;
 
-	static inline RendererCanvasCull *canvas = nullptr;
-	static inline RendererViewport *viewport = nullptr;
-	static inline RenderingMethod *scene = nullptr;
+	void set_render_mode(RSE::SDFRenderMode p_mode);
+	RSE::SDFRenderMode get_render_mode() const;
+
+	virtual AABB get_aabb() const override;
+	virtual PackedStringArray get_configuration_warnings() const override;
+
+	SDFObject3D();
+	~SDFObject3D();
 };
-
-#define RSG RenderingServerGlobals

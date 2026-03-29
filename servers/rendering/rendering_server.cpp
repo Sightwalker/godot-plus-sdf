@@ -2810,6 +2810,12 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("fog_volume_set_size", "fog_volume", "size"), &RenderingServer::fog_volume_set_size);
 	ClassDB::bind_method(D_METHOD("fog_volume_set_material", "fog_volume", "material"), &RenderingServer::fog_volume_set_material);
 
+	ClassDB::bind_method(D_METHOD("sdf_object_create"), &RenderingServer::sdf_object_create);
+	ClassDB::bind_method(D_METHOD("sdf_object_set_compiled_data", "sdf_object", "int_data", "float_data"), &RenderingServer::sdf_object_set_compiled_data);
+	ClassDB::bind_method(D_METHOD("sdf_object_set_bounds", "sdf_object", "bounds"), &RenderingServer::sdf_object_set_bounds);
+	ClassDB::bind_method(D_METHOD("sdf_object_set_material", "sdf_object", "material"), &RenderingServer::sdf_object_set_material);
+	ClassDB::bind_method(D_METHOD("sdf_object_set_render_mode", "sdf_object", "mode"), &RenderingServer::sdf_object_set_render_mode);
+
 	BIND_ENUM_CONSTANT(RSE::FOG_VOLUME_SHAPE_ELLIPSOID);
 	BIND_ENUM_CONSTANT(RSE::FOG_VOLUME_SHAPE_CONE);
 	BIND_ENUM_CONSTANT(RSE::FOG_VOLUME_SHAPE_CYLINDER);
@@ -3194,6 +3200,10 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(RSE::DOF_BLUR_QUALITY_MEDIUM);
 	BIND_ENUM_CONSTANT(RSE::DOF_BLUR_QUALITY_HIGH);
 
+	BIND_ENUM_CONSTANT(RSE::SDF_RENDER_MODE_STATIC);
+	BIND_ENUM_CONSTANT(RSE::SDF_RENDER_MODE_DYNAMIC);
+	BIND_ENUM_CONSTANT(RSE::SDF_RENDER_MODE_CHARACTER);
+
 	/* SCENARIO */
 
 	ClassDB::bind_method(D_METHOD("scenario_create"), &RenderingServer::scenario_create);
@@ -3246,6 +3256,7 @@ void RenderingServer::_bind_methods() {
 	BIND_ENUM_CONSTANT(RSE::INSTANCE_NONE);
 	BIND_ENUM_CONSTANT(RSE::INSTANCE_MESH);
 	BIND_ENUM_CONSTANT(RSE::INSTANCE_MULTIMESH);
+	BIND_ENUM_CONSTANT(RSE::INSTANCE_SDF_OBJECT);
 	BIND_ENUM_CONSTANT(RSE::INSTANCE_PARTICLES);
 	BIND_ENUM_CONSTANT(RSE::INSTANCE_PARTICLES_COLLISION);
 	BIND_ENUM_CONSTANT(RSE::INSTANCE_LIGHT);

@@ -46,6 +46,7 @@
 #include "drivers/gles3/storage/material_storage.h"
 #include "drivers/gles3/storage/mesh_storage.h"
 #include "drivers/gles3/storage/particles_storage.h"
+#include "drivers/gles3/storage/sdf_storage.h"
 #include "drivers/gles3/storage/texture_storage.h"
 #include "drivers/gles3/storage/utilities.h"
 #include "servers/rendering/renderer_compositor.h"
@@ -68,6 +69,7 @@ protected:
 	GLES3::MaterialStorage *material_storage = nullptr;
 	GLES3::MeshStorage *mesh_storage = nullptr;
 	GLES3::ParticlesStorage *particles_storage = nullptr;
+	GLES3::SDFStorage *sdf_storage = nullptr;
 	GLES3::LightStorage *light_storage = nullptr;
 	GLES3::GI *gi = nullptr;
 	GLES3::Fog *fog = nullptr;
@@ -88,6 +90,7 @@ public:
 	RendererMaterialStorage *get_material_storage() { return material_storage; }
 	RendererMeshStorage *get_mesh_storage() { return mesh_storage; }
 	RendererParticlesStorage *get_particles_storage() { return particles_storage; }
+	RendererSDFStorage *get_sdf_storage() { return sdf_storage; }
 	RendererTextureStorage *get_texture_storage() { return texture_storage; }
 	RendererGI *get_gi() { return gi; }
 	RendererFog *get_fog() { return fog; }

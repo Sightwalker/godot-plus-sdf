@@ -502,6 +502,14 @@ public:
 	virtual void fog_volume_set_size(RID p_fog_volume, const Vector3 &p_size) = 0;
 	virtual void fog_volume_set_material(RID p_fog_volume, RID p_material) = 0;
 
+	/* SDF OBJECT API */
+
+	virtual RID sdf_object_create() = 0;
+	virtual void sdf_object_set_compiled_data(RID p_sdf_object, const PackedInt32Array &p_int_data, const PackedFloat32Array &p_float_data) = 0;
+	virtual void sdf_object_set_bounds(RID p_sdf_object, const AABB &p_bounds) = 0;
+	virtual void sdf_object_set_material(RID p_sdf_object, RID p_material) = 0;
+	virtual void sdf_object_set_render_mode(RID p_sdf_object, RSE::SDFRenderMode p_mode) = 0;
+
 	/* VISIBILITY NOTIFIER API */
 
 	virtual RID visibility_notifier_create() = 0;
@@ -1142,6 +1150,7 @@ VARIANT_ENUM_CAST_EXT(RSE::EnvironmentSDFGIYScale, RenderingServer::EnvironmentS
 VARIANT_ENUM_CAST_EXT(RSE::SubSurfaceScatteringQuality, RenderingServer::SubSurfaceScatteringQuality);
 VARIANT_ENUM_CAST_EXT(RSE::DOFBlurQuality, RenderingServer::DOFBlurQuality);
 VARIANT_ENUM_CAST_EXT(RSE::DOFBokehShape, RenderingServer::DOFBokehShape);
+VARIANT_ENUM_CAST_EXT(RSE::SDFRenderMode, RenderingServer::SDFRenderMode);
 VARIANT_ENUM_CAST_EXT(RSE::ShadowQuality, RenderingServer::ShadowQuality);
 VARIANT_ENUM_CAST_EXT(RSE::InstanceType, RenderingServer::InstanceType);
 VARIANT_ENUM_CAST_EXT(RSE::InstanceFlags, RenderingServer::InstanceFlags);

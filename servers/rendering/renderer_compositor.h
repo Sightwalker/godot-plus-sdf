@@ -45,6 +45,7 @@ class RendererMeshStorage;
 class RendererParticlesStorage;
 class RendererTextureStorage;
 class RendererUtilities;
+class RendererSDFStorage;
 
 class Image;
 struct Color;
@@ -72,6 +73,7 @@ public:
 	virtual RendererMeshStorage *get_mesh_storage() = 0;
 	virtual RendererParticlesStorage *get_particles_storage() = 0;
 	virtual RendererTextureStorage *get_texture_storage() = 0;
+	virtual RendererSDFStorage *get_sdf_storage() = 0;
 	virtual RendererUtilities *get_utilities() = 0;
 
 	virtual void set_boot_image_with_stretch(const Ref<Image> &p_image, const Color &p_color, RSE::SplashStretchMode p_stretch_mode, bool p_use_filter = true) = 0;

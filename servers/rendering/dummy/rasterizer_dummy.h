@@ -43,6 +43,7 @@ class LightStorage;
 class MaterialStorage;
 class MeshStorage;
 class ParticlesStorage;
+class SDFStorage;
 class TextureStorage;
 class Utilities;
 } //namespace RendererDummy
@@ -63,6 +64,7 @@ protected:
 	RendererDummy::MaterialStorage *material_storage = nullptr;
 	RendererDummy::MeshStorage *mesh_storage = nullptr;
 	RendererDummy::ParticlesStorage *particles_storage = nullptr;
+	RendererDummy::SDFStorage *sdf_storage = nullptr;
 	RendererDummy::TextureStorage *texture_storage = nullptr;
 	RendererDummy::Utilities *utilities = nullptr;
 
@@ -77,6 +79,7 @@ public:
 	RendererMeshStorage *get_mesh_storage() override;
 	RendererParticlesStorage *get_particles_storage() override;
 	RendererTextureStorage *get_texture_storage() override;
+	RendererSDFStorage *get_sdf_storage() override;
 	RendererUtilities *get_utilities() override;
 
 	void set_boot_image_with_stretch(const Ref<Image> &p_image, const Color &p_color, RSE::SplashStretchMode p_stretch_mode, bool p_use_filter = true) override {}

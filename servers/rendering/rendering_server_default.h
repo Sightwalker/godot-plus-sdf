@@ -682,6 +682,21 @@ public:
 	FUNC2(fog_volume_set_size, RID, const Vector3 &)
 	FUNC2(fog_volume_set_material, RID, RID)
 
+	/* SDF OBJECT */
+
+#undef ServerName
+#undef server_name
+
+#define ServerName RendererSDFStorage
+#define server_name RSG::sdf_storage
+
+	FUNCRIDSPLIT(sdf_object)
+
+	FUNC3(sdf_object_set_compiled_data, RID, const PackedInt32Array &, const PackedFloat32Array &)
+	FUNC2(sdf_object_set_bounds, RID, const AABB &)
+	FUNC2(sdf_object_set_material, RID, RID)
+	FUNC2(sdf_object_set_render_mode, RID, RSE::SDFRenderMode)
+
 	/* VISIBILITY_NOTIFIER */
 
 #undef ServerName

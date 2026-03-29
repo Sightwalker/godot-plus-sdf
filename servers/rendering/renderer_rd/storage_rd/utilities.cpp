@@ -35,6 +35,7 @@
 #include "servers/rendering/renderer_rd/storage_rd/light_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/mesh_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/particles_storage.h"
+#include "servers/rendering/renderer_rd/storage_rd/sdf_storage.h"
 #include "servers/rendering/renderer_rd/storage_rd/texture_storage.h"
 
 using namespace RendererRD;
@@ -57,6 +58,9 @@ RSE::InstanceType Utilities::get_base_type(RID p_rid) const {
 	}
 	if (RendererRD::MeshStorage::get_singleton()->owns_multimesh(p_rid)) {
 		return RSE::INSTANCE_MULTIMESH;
+	}
+	if (RendererRD::SDFStorage::get_singleton()->owns_sdf_object(p_rid)) {
+		return RSE::INSTANCE_SDF_OBJECT;
 	}
 	if (RendererRD::LightStorage::get_singleton()->owns_reflection_probe(p_rid)) {
 		return RSE::INSTANCE_REFLECTION_PROBE;
@@ -96,6 +100,9 @@ bool Utilities::free(RID p_rid) {
 		return true;
 	} else if (RendererRD::MeshStorage::get_singleton()->free(p_rid)) {
 		return true;
+	} else if (RendererRD::SDFStorage::get_singleton()->owns_sdf_object(p_rid)) {
+		RendererRD::SDFStorage::get_singleton()->sdf_object_free(p_rid);
+		return true;
 	} else if (RendererRD::ParticlesStorage::get_singleton()->free(p_rid)) {
 		return true;
 	} else if (RendererRD::TextureStorage::get_singleton()->free(p_rid)) {
@@ -128,6 +135,9 @@ void Utilities::base_update_dependency(RID p_base, DependencyTracker *p_instance
 		if (mesh.is_valid()) {
 			base_update_dependency(mesh, p_instance);
 		}
+	} else if (SDFStorage::get_singleton()->owns_sdf_object(p_base)) {
+		Dependency *dependency = SDFStorage::get_singleton()->sdf_object_get_dependency(p_base);
+		p_instance->update_dependency(dependency);
 	} else if (LightStorage::get_singleton()->owns_reflection_probe(p_base)) {
 		Dependency *dependency = LightStorage::get_singleton()->reflection_probe_get_dependency(p_base);
 		p_instance->update_dependency(dependency);
