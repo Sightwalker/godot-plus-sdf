@@ -30,6 +30,7 @@
 
 #include "sdf_shape_3d.h"
 
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "scene/3d/sdf_object_3d.h"
 #include "servers/rendering/rendering_server.h"
@@ -39,6 +40,8 @@ void SDFShape3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_shape_type"), &SDFShape3D::get_shape_type);
 	ClassDB::bind_method(D_METHOD("set_operation", "operation"), &SDFShape3D::set_operation);
 	ClassDB::bind_method(D_METHOD("get_operation"), &SDFShape3D::get_operation);
+	ClassDB::bind_method(D_METHOD("set_operation_order", "order"), &SDFShape3D::set_operation_order);
+	ClassDB::bind_method(D_METHOD("get_operation_order"), &SDFShape3D::get_operation_order);
 	ClassDB::bind_method(D_METHOD("set_render_mode_hint", "mode"), &SDFShape3D::set_render_mode_hint);
 	ClassDB::bind_method(D_METHOD("get_render_mode_hint"), &SDFShape3D::get_render_mode_hint);
 	ClassDB::bind_method(D_METHOD("set_smoothness", "smoothness"), &SDFShape3D::set_smoothness);
@@ -72,6 +75,8 @@ void SDFShape3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_angle2"), &SDFShape3D::get_angle2);
 	ClassDB::bind_method(D_METHOD("set_roundness", "roundness"), &SDFShape3D::set_roundness);
 	ClassDB::bind_method(D_METHOD("get_roundness"), &SDFShape3D::get_roundness);
+	ClassDB::bind_method(D_METHOD("set_sdf_material_override", "material"), &SDFShape3D::set_sdf_material_override);
+	ClassDB::bind_method(D_METHOD("get_sdf_material_override"), &SDFShape3D::get_sdf_material_override);
 	ClassDB::bind_method(D_METHOD("set_color", "color"), &SDFShape3D::set_color);
 	ClassDB::bind_method(D_METHOD("get_color"), &SDFShape3D::get_color);
 	ClassDB::bind_method(D_METHOD("set_opacity", "opacity"), &SDFShape3D::set_opacity);
@@ -80,6 +85,7 @@ void SDFShape3D::_bind_methods() {
 	ADD_GROUP("SDF Shape", "shape_");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "shape_type", PROPERTY_HINT_ENUM, "Sphere,Box,Rounded Box,Torus,Capped Torus,Link,Capsule,Cylinder,Capped Cylinder,Cone,Capped Cone,Round Cone,Plane,Hex Prism,Tri Prism,Ellipsoid,Cut Sphere,Cut Hollow Sphere,Death Star,Solid Angle"), "set_shape_type", "get_shape_type");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "operation", PROPERTY_HINT_ENUM, "Union,Subtract,Intersect,Smooth Union,Smooth Subtract,Smooth Intersect"), "set_operation", "get_operation");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "operation_order", PROPERTY_HINT_RANGE, "-4096,4096,1"), "set_operation_order", "get_operation_order");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "render_mode_hint", PROPERTY_HINT_ENUM, "Static,Dynamic,Character"), "set_render_mode_hint", "get_render_mode_hint");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "smoothness", PROPERTY_HINT_RANGE, "0.001,4.0,0.001,or_greater"), "set_smoothness", "get_smoothness");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "membership_layers", PROPERTY_HINT_LAYERS_3D_RENDER), "set_membership_layers", "get_membership_layers");
@@ -95,6 +101,7 @@ void SDFShape3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "angle", PROPERTY_HINT_RANGE, "-360,360,0.1,radians_as_degrees"), "set_angle", "get_angle");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "angle2", PROPERTY_HINT_RANGE, "-360,360,0.1,radians_as_degrees"), "set_angle2", "get_angle2");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "roundness", PROPERTY_HINT_RANGE, "0,4096,0.001,or_greater,suffix:m"), "set_roundness", "get_roundness");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "sdf_material_override", PROPERTY_HINT_RESOURCE_TYPE, "SDFMaterial3D"), "set_sdf_material_override", "get_sdf_material_override");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "color"), "set_color", "get_color");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "opacity", PROPERTY_HINT_RANGE, "0,1,0.001"), "set_opacity", "get_opacity");
 
@@ -190,6 +197,10 @@ void SDFShape3D::_notify_owner_sdf_object() {
 	}
 }
 
+void SDFShape3D::_sdf_material_changed() {
+	_notify_owner_sdf_object();
+}
+
 void SDFShape3D::_notification(int p_what) {
 	switch (p_what) {
 		case NOTIFICATION_TRANSFORM_CHANGED:
@@ -226,6 +237,18 @@ void SDFShape3D::set_operation(SDFOperation p_operation) {
 
 SDFShape3D::SDFOperation SDFShape3D::get_operation() const {
 	return operation;
+}
+
+void SDFShape3D::set_operation_order(int p_operation_order) {
+	if (operation_order == p_operation_order) {
+		return;
+	}
+	operation_order = p_operation_order;
+	_notify_owner_sdf_object();
+}
+
+int SDFShape3D::get_operation_order() const {
+	return operation_order;
 }
 
 void SDFShape3D::set_render_mode_hint(RSE::SDFRenderMode p_mode) {
@@ -382,6 +405,28 @@ float SDFShape3D::get_roundness() const {
 	return roundness;
 }
 
+void SDFShape3D::set_sdf_material_override(const Ref<SDFMaterial3D> &p_material) {
+	if (sdf_material_override == p_material) {
+		return;
+	}
+
+	if (sdf_material_override.is_valid()) {
+		sdf_material_override->disconnect_changed(callable_mp(this, &SDFShape3D::_sdf_material_changed));
+	}
+
+	sdf_material_override = p_material;
+
+	if (sdf_material_override.is_valid()) {
+		sdf_material_override->connect_changed(callable_mp(this, &SDFShape3D::_sdf_material_changed), CONNECT_REFERENCE_COUNTED);
+	}
+
+	_notify_owner_sdf_object();
+}
+
+Ref<SDFMaterial3D> SDFShape3D::get_sdf_material_override() const {
+	return sdf_material_override;
+}
+
 void SDFShape3D::set_color(const Color &p_color) {
 	color = p_color;
 	_notify_owner_sdf_object();
@@ -454,7 +499,7 @@ void SDFShape3D::append_compiled_data(PackedInt32Array &r_int_data, PackedFloat3
 	r_int_data.push_back(int32_t(render_mode_hint));
 	r_int_data.push_back(int32_t(membership_layers));
 	r_int_data.push_back(int32_t(affect_layers));
-	r_int_data.push_back(0); // Reserved for flags.
+	r_int_data.push_back(int32_t(operation_order)); // Reserved/ordering.
 
 	const Basis &b = p_object_local_transform.basis;
 	const Vector3 &o = p_object_local_transform.origin;
@@ -494,4 +539,10 @@ void SDFShape3D::append_compiled_data(PackedInt32Array &r_int_data, PackedFloat3
 
 SDFShape3D::SDFShape3D() {
 	set_notify_transform(true);
+}
+
+SDFShape3D::~SDFShape3D() {
+	if (sdf_material_override.is_valid()) {
+		sdf_material_override->disconnect_changed(callable_mp(this, &SDFShape3D::_sdf_material_changed));
+	}
 }

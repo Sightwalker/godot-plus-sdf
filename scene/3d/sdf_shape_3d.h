@@ -31,6 +31,7 @@
 #pragma once
 
 #include "scene/3d/node_3d.h"
+#include "scene/resources/sdf_material_3d.h"
 #include "servers/rendering/rendering_server_enums.h"
 
 class SDFShape3D : public Node3D {
@@ -72,6 +73,7 @@ public:
 private:
 	SDFPrimitiveType shape_type = SDF_PRIMITIVE_SPHERE;
 	SDFOperation operation = SDF_OPERATION_UNION;
+	int operation_order = 0;
 	RSE::SDFRenderMode render_mode_hint = RSE::SDF_RENDER_MODE_STATIC;
 
 	float smoothness = 0.15f;
@@ -88,10 +90,12 @@ private:
 	float angle2 = 0.523598776f;
 	float roundness = 0.1f;
 
+	Ref<SDFMaterial3D> sdf_material_override;
 	Color color = Color(1, 1, 1, 1);
 	float opacity = 1.0f;
 
 	void _notify_owner_sdf_object();
+	void _sdf_material_changed();
 	bool _uses_smooth_operation() const;
 
 protected:
@@ -105,6 +109,9 @@ public:
 
 	void set_operation(SDFOperation p_operation);
 	SDFOperation get_operation() const;
+
+	void set_operation_order(int p_operation_order);
+	int get_operation_order() const;
 
 	void set_render_mode_hint(RSE::SDFRenderMode p_mode);
 	RSE::SDFRenderMode get_render_mode_hint() const;
@@ -149,6 +156,9 @@ public:
 	void set_roundness(float p_roundness);
 	float get_roundness() const;
 
+	void set_sdf_material_override(const Ref<SDFMaterial3D> &p_material);
+	Ref<SDFMaterial3D> get_sdf_material_override() const;
+
 	void set_color(const Color &p_color);
 	Color get_color() const;
 
@@ -159,6 +169,7 @@ public:
 	void append_compiled_data(PackedInt32Array &r_int_data, PackedFloat32Array &r_float_data, const Transform3D &p_object_local_transform) const;
 
 	SDFShape3D();
+	~SDFShape3D();
 };
 
 VARIANT_ENUM_CAST(SDFShape3D::SDFPrimitiveType);

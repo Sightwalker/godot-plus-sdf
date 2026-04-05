@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="SDFObject3D" inherits="GeometryInstance3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Container and renderable 3D signed-distance-field object composed from child [SDFShape3D] nodes.
+	</brief_description>
+	<description>
+		[SDFObject3D] is a Node3D-workflow container for SDF primitives. It compiles descendant [SDFShape3D] nodes into a single renderable SDF object and applies object-level operations, ordering and layer targeting.
+		[b]Note:[/b] Runtime rendering is currently only supported in Forward+.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_membership_layer_value" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="layer_number" type="int" />
+			<description>
+				Returns whether the given [param layer_number] (1 to 32) is enabled in [member sdf_membership_layers].
+			</description>
+		</method>
+		<method name="set_membership_layer_value">
+			<return type="void" />
+			<param index="0" name="layer_number" type="int" />
+			<param index="1" name="value" type="bool" />
+			<description>
+				Enables or disables a specific bit in [member sdf_membership_layers] for [param layer_number] (1 to 32).
+			</description>
+		</method>
+		<method name="get_affect_layer_value" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="layer_number" type="int" />
+			<description>
+				Returns whether the given [param layer_number] (1 to 32) is enabled in [member sdf_affect_layers].
+			</description>
+		</method>
+		<method name="set_affect_layer_value">
+			<return type="void" />
+			<param index="0" name="layer_number" type="int" />
+			<param index="1" name="value" type="bool" />
+			<description>
+				Enables or disables a specific bit in [member sdf_affect_layers] for [param layer_number] (1 to 32).
+			</description>
+		</method>
+		<method name="rebuild">
+			<return type="void" />
+			<description>
+				Requests a rebuild of the compiled SDF data from descendant [SDFShape3D] nodes.
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="sdf_material" type="SDFMaterial3D" setter="set_sdf_material" getter="get_sdf_material">
+			Material resource used by this SDF object. Its albedo tint is used as the default tint for descendant [SDFShape3D] nodes that do not define [member SDFShape3D.sdf_material_override].
+		</member>
+		<member name="sdf_render_mode" type="int" setter="set_render_mode" getter="get_render_mode" default="0">
+			Render usage bucket hint for this object. Used by the runtime SDF pass to choose marching quality heuristics.
+		</member>
+		<member name="sdf_inside_render_mode" type="int" setter="set_inside_render_mode" getter="get_inside_render_mode" enum="SDFObject3D.SDFInsideRenderMode" default="1">
+			Controls how pixels are handled when the camera ray starts inside the SDF volume.
+		</member>
+		<member name="sdf_operation" type="int" setter="set_operation" getter="get_operation" enum="SDFObject3D.SDFOperation" default="0">
+			Object-level CSG operation used when composing this object with the accumulated SDF result.
+		</member>
+		<member name="sdf_operation_order" type="int" setter="set_operation_order" getter="get_operation_order" default="0">
+			Object-level operation ordering value. Lower values are evaluated first.
+		</member>
+		<member name="sdf_smoothness" type="float" setter="set_smoothness" getter="get_smoothness" default="0.15">
+			Blend radius used by smooth object operations.
+		</member>
+		<member name="sdf_membership_layers" type="int" setter="set_membership_layers" getter="get_membership_layers" default="1">
+			Layer mask this object belongs to for operation targeting.
+		</member>
+		<member name="sdf_affect_layers" type="int" setter="set_affect_layers" getter="get_affect_layers" default="4294967295">
+			Layer mask this object can affect for non-union operations.
+		</member>
+	</members>
+	<constants>
+		<constant name="SDF_OPERATION_UNION" value="0" enum="SDFOperation">
+			Unions this object with the accumulated result.
+		</constant>
+		<constant name="SDF_OPERATION_SUBTRACT" value="1" enum="SDFOperation">
+			Subtracts this object from the accumulated result.
+		</constant>
+		<constant name="SDF_OPERATION_INTERSECT" value="2" enum="SDFOperation">
+			Intersects this object with the accumulated result.
+		</constant>
+		<constant name="SDF_OPERATION_SMOOTH_UNION" value="3" enum="SDFOperation">
+			Smoothly unions this object with the accumulated result.
+		</constant>
+		<constant name="SDF_OPERATION_SMOOTH_SUBTRACT" value="4" enum="SDFOperation">
+			Smoothly subtracts this object from the accumulated result.
+		</constant>
+		<constant name="SDF_OPERATION_SMOOTH_INTERSECT" value="5" enum="SDFOperation">
+			Smoothly intersects this object with the accumulated result.
+		</constant>
+		<constant name="SDF_INSIDE_RENDER_DISCARD" value="0" enum="SDFInsideRenderMode">
+			Discard pixels when starting inside the SDF volume.
+		</constant>
+		<constant name="SDF_INSIDE_RENDER_EXIT_SURFACE" value="1" enum="SDFInsideRenderMode">
+			March to the exit surface when starting inside.
+		</constant>
+		<constant name="SDF_INSIDE_RENDER_TWO_SIDED" value="2" enum="SDFInsideRenderMode">
+			March to the exit surface and flip normal direction when hitting from inside.
+		</constant>
+	</constants>
+</class>

@@ -45,6 +45,12 @@ private:
 		AABB bounds = AABB(Vector3(-1, -1, -1), Vector3(2, 2, 2));
 		RID material;
 		RSE::SDFRenderMode render_mode = RSE::SDF_RENDER_MODE_STATIC;
+		int operation = 0;
+		int operation_order = 0;
+		float smoothness = 0.15f;
+		uint32_t membership_layers = 1;
+		uint32_t affect_layers = 0xFFFFFFFFu;
+		int inside_render_mode = 1;
 		Dependency dependency;
 	};
 
@@ -69,6 +75,15 @@ public:
 	virtual RID sdf_object_get_material(RID p_sdf_object) const override;
 	virtual void sdf_object_set_render_mode(RID p_sdf_object, RSE::SDFRenderMode p_mode) override;
 	virtual RSE::SDFRenderMode sdf_object_get_render_mode(RID p_sdf_object) const override;
+	virtual void sdf_object_set_operation_data(RID p_sdf_object, int p_operation, int p_operation_order, float p_smoothness, uint32_t p_membership_layers, uint32_t p_affect_layers, int p_inside_render_mode) override;
+	virtual int sdf_object_get_operation(RID p_sdf_object) const override;
+	virtual int sdf_object_get_operation_order(RID p_sdf_object) const override;
+	virtual float sdf_object_get_smoothness(RID p_sdf_object) const override;
+	virtual uint32_t sdf_object_get_membership_layers(RID p_sdf_object) const override;
+	virtual uint32_t sdf_object_get_affect_layers(RID p_sdf_object) const override;
+	virtual int sdf_object_get_inside_render_mode(RID p_sdf_object) const override;
+	virtual PackedInt32Array sdf_object_get_compiled_int_data(RID p_sdf_object) const override;
+	virtual PackedFloat32Array sdf_object_get_compiled_float_data(RID p_sdf_object) const override;
 	virtual RID sdf_object_get_compiled_int_buffer(RID p_sdf_object) const override;
 	virtual RID sdf_object_get_compiled_float_buffer(RID p_sdf_object) const override;
 	virtual uint32_t sdf_object_get_shape_count(RID p_sdf_object) const override;

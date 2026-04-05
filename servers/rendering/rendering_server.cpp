@@ -2815,6 +2815,7 @@ void RenderingServer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("sdf_object_set_bounds", "sdf_object", "bounds"), &RenderingServer::sdf_object_set_bounds);
 	ClassDB::bind_method(D_METHOD("sdf_object_set_material", "sdf_object", "material"), &RenderingServer::sdf_object_set_material);
 	ClassDB::bind_method(D_METHOD("sdf_object_set_render_mode", "sdf_object", "mode"), &RenderingServer::sdf_object_set_render_mode);
+	ClassDB::bind_method(D_METHOD("sdf_object_set_operation_data", "sdf_object", "operation", "operation_order", "smoothness", "membership_layers", "affect_layers", "inside_render_mode"), &RenderingServer::sdf_object_set_operation_data);
 
 	BIND_ENUM_CONSTANT(RSE::FOG_VOLUME_SHAPE_ELLIPSOID);
 	BIND_ENUM_CONSTANT(RSE::FOG_VOLUME_SHAPE_CONE);

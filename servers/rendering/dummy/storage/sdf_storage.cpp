@@ -107,6 +107,66 @@ RSE::SDFRenderMode SDFStorage::sdf_object_get_render_mode(RID p_sdf_object) cons
 	return sdf_object->render_mode;
 }
 
+void SDFStorage::sdf_object_set_operation_data(RID p_sdf_object, int p_operation, int p_operation_order, float p_smoothness, uint32_t p_membership_layers, uint32_t p_affect_layers, int p_inside_render_mode) {
+	SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL(sdf_object);
+	sdf_object->operation = p_operation;
+	sdf_object->operation_order = p_operation_order;
+	sdf_object->smoothness = p_smoothness;
+	sdf_object->membership_layers = p_membership_layers;
+	sdf_object->affect_layers = p_affect_layers;
+	sdf_object->inside_render_mode = p_inside_render_mode;
+	sdf_object->dependency.changed_notify(Dependency::DEPENDENCY_CHANGED_MESH);
+}
+
+int SDFStorage::sdf_object_get_operation(RID p_sdf_object) const {
+	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL_V(sdf_object, 0);
+	return sdf_object->operation;
+}
+
+int SDFStorage::sdf_object_get_operation_order(RID p_sdf_object) const {
+	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL_V(sdf_object, 0);
+	return sdf_object->operation_order;
+}
+
+float SDFStorage::sdf_object_get_smoothness(RID p_sdf_object) const {
+	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL_V(sdf_object, 0.15f);
+	return sdf_object->smoothness;
+}
+
+uint32_t SDFStorage::sdf_object_get_membership_layers(RID p_sdf_object) const {
+	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL_V(sdf_object, 1);
+	return sdf_object->membership_layers;
+}
+
+uint32_t SDFStorage::sdf_object_get_affect_layers(RID p_sdf_object) const {
+	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL_V(sdf_object, 0xFFFFFFFFu);
+	return sdf_object->affect_layers;
+}
+
+int SDFStorage::sdf_object_get_inside_render_mode(RID p_sdf_object) const {
+	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL_V(sdf_object, 1);
+	return sdf_object->inside_render_mode;
+}
+
+PackedInt32Array SDFStorage::sdf_object_get_compiled_int_data(RID p_sdf_object) const {
+	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL_V(sdf_object, PackedInt32Array());
+	return sdf_object->int_data;
+}
+
+PackedFloat32Array SDFStorage::sdf_object_get_compiled_float_data(RID p_sdf_object) const {
+	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
+	ERR_FAIL_NULL_V(sdf_object, PackedFloat32Array());
+	return sdf_object->float_data;
+}
+
 RID SDFStorage::sdf_object_get_compiled_int_buffer(RID p_sdf_object) const {
 	const SDFObject *sdf_object = sdf_object_owner.get_or_null(p_sdf_object);
 	ERR_FAIL_NULL_V(sdf_object, RID());

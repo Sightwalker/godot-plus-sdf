@@ -1721,108 +1721,283 @@ void RenderForwardClustered::_render_sdf_objects(const RenderDataRD *p_render_da
 		return;
 	}
 
-	bool draw_list_started = false;
-	RD::DrawListID draw_list = 0;
+	struct SDFVisibleObject {
+		const GeometryInstanceForwardClustered *ginstance = nullptr;
+		RID sdf_object;
+		int operation_order = 0;
+	};
+	struct SDFVisibleObjectSort {
+		_FORCE_INLINE_ bool operator()(const SDFVisibleObject &l, const SDFVisibleObject &r) const {
+			if (l.operation_order == r.operation_order) {
+				return l.sdf_object.get_id() < r.sdf_object.get_id();
+			}
+			return l.operation_order < r.operation_order;
+		}
+	};
 
+	constexpr int SHAPE_INT_HEADER_SIZE = 2;
+	constexpr int SHAPE_INT_STRIDE = 6;
+	constexpr int SHAPE_FLOAT_STRIDE = 32;
+	constexpr int OBJECT_INT_STRIDE = 8;
+
+	Vector<SDFVisibleObject> visible_objects;
+	visible_objects.reserve(p_render_data->instances->size());
 	for (int i = 0; i < (int)p_render_data->instances->size(); i++) {
 		const GeometryInstanceForwardClustered *ginstance = static_cast<const GeometryInstanceForwardClustered *>((*p_render_data->instances)[i]);
 		if (ginstance->data->base_type != RSE::INSTANCE_SDF_OBJECT) {
 			continue;
 		}
-
 		const RID sdf_object = ginstance->data->base;
-		const uint32_t shape_count = RSG::sdf_storage->sdf_object_get_shape_count(sdf_object);
-		if (shape_count == 0) {
+		if (RSG::sdf_storage->sdf_object_get_shape_count(sdf_object) == 0) {
+			continue;
+		}
+		SDFVisibleObject obj;
+		obj.ginstance = ginstance;
+		obj.sdf_object = sdf_object;
+		obj.operation_order = RSG::sdf_storage->sdf_object_get_operation_order(sdf_object);
+		visible_objects.push_back(obj);
+	}
+
+	if (visible_objects.is_empty()) {
+		return;
+	}
+	visible_objects.sort_custom<SDFVisibleObjectSort>();
+
+	PackedInt32Array scene_shape_int_data;
+	PackedFloat32Array scene_shape_float_data;
+	PackedInt32Array scene_object_int_data;
+	PackedFloat32Array scene_object_float_data;
+	AABB scene_bounds;
+	bool has_scene_bounds = false;
+	float nearest_depth = 1e20f;
+	RSE::SDFRenderMode nearest_render_mode = RSE::SDF_RENDER_MODE_STATIC;
+
+	for (int i = 0; i < visible_objects.size(); i++) {
+		const SDFVisibleObject &entry = visible_objects[i];
+		const GeometryInstanceForwardClustered *ginstance = entry.ginstance;
+		const RID sdf_object = entry.sdf_object;
+
+		PackedInt32Array object_int_data = RSG::sdf_storage->sdf_object_get_compiled_int_data(sdf_object);
+		PackedFloat32Array object_float_data = RSG::sdf_storage->sdf_object_get_compiled_float_data(sdf_object);
+		if (object_int_data.size() < SHAPE_INT_HEADER_SIZE || object_float_data.is_empty()) {
+			continue;
+		}
+		if (object_int_data[1] != 1) {
 			continue;
 		}
 
-		const RID int_buffer = RSG::sdf_storage->sdf_object_get_compiled_int_buffer(sdf_object);
-		const RID float_buffer = RSG::sdf_storage->sdf_object_get_compiled_float_buffer(sdf_object);
-		if (int_buffer.is_null() || float_buffer.is_null()) {
+		int object_shape_count = MAX(object_int_data[0], 0);
+		const int max_shape_count_from_int = MAX((object_int_data.size() - SHAPE_INT_HEADER_SIZE) / SHAPE_INT_STRIDE, 0);
+		const int max_shape_count_from_float = object_float_data.size() / SHAPE_FLOAT_STRIDE;
+		object_shape_count = MIN(object_shape_count, MIN(max_shape_count_from_int, max_shape_count_from_float));
+		if (object_shape_count <= 0) {
 			continue;
 		}
 
-		const AABB bounds = RSG::sdf_storage->sdf_object_get_bounds(sdf_object);
-		if (!bounds.is_finite()) {
+		const AABB local_bounds = RSG::sdf_storage->sdf_object_get_bounds(sdf_object);
+		if (!local_bounds.is_finite()) {
 			continue;
+		}
+		const AABB world_bounds = ginstance->transform.xform(local_bounds);
+		if (!world_bounds.is_finite()) {
+			continue;
+		}
+		if (!has_scene_bounds) {
+			scene_bounds = world_bounds;
+			has_scene_bounds = true;
+		} else {
+			scene_bounds.merge_with(world_bounds);
+		}
+
+		const int shape_offset = scene_shape_int_data.size() / SHAPE_INT_STRIDE;
+		for (int shape_index = 0; shape_index < object_shape_count; shape_index++) {
+			const int in_i = SHAPE_INT_HEADER_SIZE + shape_index * SHAPE_INT_STRIDE;
+			for (int k = 0; k < SHAPE_INT_STRIDE; k++) {
+				scene_shape_int_data.push_back(object_int_data[in_i + k]);
+			}
+
+			const int in_f = shape_index * SHAPE_FLOAT_STRIDE;
+			Transform3D local_shape_xform;
+			local_shape_xform.basis.rows[0] = Vector3(object_float_data[in_f + 0], object_float_data[in_f + 1], object_float_data[in_f + 2]);
+			local_shape_xform.origin.x = object_float_data[in_f + 3];
+			local_shape_xform.basis.rows[1] = Vector3(object_float_data[in_f + 4], object_float_data[in_f + 5], object_float_data[in_f + 6]);
+			local_shape_xform.origin.y = object_float_data[in_f + 7];
+			local_shape_xform.basis.rows[2] = Vector3(object_float_data[in_f + 8], object_float_data[in_f + 9], object_float_data[in_f + 10]);
+			local_shape_xform.origin.z = object_float_data[in_f + 11];
+
+			const Transform3D world_shape_xform = ginstance->transform * local_shape_xform;
+			const Basis &wb = world_shape_xform.basis;
+			const Vector3 &wo = world_shape_xform.origin;
+
+			scene_shape_float_data.push_back(wb.rows[0][0]);
+			scene_shape_float_data.push_back(wb.rows[0][1]);
+			scene_shape_float_data.push_back(wb.rows[0][2]);
+			scene_shape_float_data.push_back(wo.x);
+			scene_shape_float_data.push_back(wb.rows[1][0]);
+			scene_shape_float_data.push_back(wb.rows[1][1]);
+			scene_shape_float_data.push_back(wb.rows[1][2]);
+			scene_shape_float_data.push_back(wo.y);
+			scene_shape_float_data.push_back(wb.rows[2][0]);
+			scene_shape_float_data.push_back(wb.rows[2][1]);
+			scene_shape_float_data.push_back(wb.rows[2][2]);
+			scene_shape_float_data.push_back(wo.z);
+			for (int k = 12; k < SHAPE_FLOAT_STRIDE; k++) {
+				scene_shape_float_data.push_back(object_float_data[in_f + k]);
+			}
 		}
 
 		const RSE::SDFRenderMode render_mode = RSG::sdf_storage->sdf_object_get_render_mode(sdf_object);
-		const float lod_factor = CLAMP(ginstance->depth / 80.0f, 0.0f, 1.0f);
-		int base_steps = 96;
-		switch (render_mode) {
-			case RSE::SDF_RENDER_MODE_STATIC:
-				base_steps = 128;
-				break;
-			case RSE::SDF_RENDER_MODE_DYNAMIC:
-				base_steps = 96;
-				break;
-			case RSE::SDF_RENDER_MODE_CHARACTER:
-				base_steps = 112;
-				break;
-			default:
-				break;
+		scene_object_int_data.push_back(shape_offset);
+		scene_object_int_data.push_back(object_shape_count);
+		scene_object_int_data.push_back(RSG::sdf_storage->sdf_object_get_operation(sdf_object));
+		scene_object_int_data.push_back(int32_t(render_mode));
+		scene_object_int_data.push_back(int32_t(RSG::sdf_storage->sdf_object_get_membership_layers(sdf_object)));
+		scene_object_int_data.push_back(int32_t(RSG::sdf_storage->sdf_object_get_affect_layers(sdf_object)));
+		scene_object_int_data.push_back(RSG::sdf_storage->sdf_object_get_inside_render_mode(sdf_object));
+		scene_object_int_data.push_back(0);
+
+		scene_object_float_data.push_back(RSG::sdf_storage->sdf_object_get_smoothness(sdf_object));
+		scene_object_float_data.push_back(0.0f);
+		scene_object_float_data.push_back(0.0f);
+		scene_object_float_data.push_back(0.0f);
+		const Vector3 bmin = world_bounds.position;
+		const Vector3 bmax = world_bounds.position + world_bounds.size;
+		scene_object_float_data.push_back(bmin.x);
+		scene_object_float_data.push_back(bmin.y);
+		scene_object_float_data.push_back(bmin.z);
+		scene_object_float_data.push_back(0.0f);
+		scene_object_float_data.push_back(bmax.x);
+		scene_object_float_data.push_back(bmax.y);
+		scene_object_float_data.push_back(bmax.z);
+		scene_object_float_data.push_back(0.0f);
+
+		if (ginstance->depth < nearest_depth) {
+			nearest_depth = ginstance->depth;
+			nearest_render_mode = render_mode;
 		}
-		const uint32_t max_steps = uint32_t(MAX(int(Math::lerp((float)base_steps, (float)MAX(base_steps / 2, 24), lod_factor)), 16));
-
-		_store_projection_matrix(view_projection, sdf_object_pass.uniform_data.view_projection);
-		_store_projection_matrix(inv_projection, sdf_object_pass.uniform_data.inv_projection);
-		RendererRD::MaterialStorage::store_transform(inv_view, sdf_object_pass.uniform_data.inv_view);
-		RendererRD::MaterialStorage::store_transform(ginstance->transform, sdf_object_pass.uniform_data.object_to_world);
-		RendererRD::MaterialStorage::store_transform(ginstance->transform.affine_inverse(), sdf_object_pass.uniform_data.world_to_object);
-
-		const Vector3 bmin = bounds.position;
-		const Vector3 bmax = bounds.position + bounds.size;
-		sdf_object_pass.uniform_data.bounds_min[0] = bmin.x;
-		sdf_object_pass.uniform_data.bounds_min[1] = bmin.y;
-		sdf_object_pass.uniform_data.bounds_min[2] = bmin.z;
-		sdf_object_pass.uniform_data.bounds_min[3] = 0.0f;
-		sdf_object_pass.uniform_data.bounds_max[0] = bmax.x;
-		sdf_object_pass.uniform_data.bounds_max[1] = bmax.y;
-		sdf_object_pass.uniform_data.bounds_max[2] = bmax.z;
-		sdf_object_pass.uniform_data.bounds_max[3] = 0.0f;
-
-		sdf_object_pass.uniform_data.data_info[0] = shape_count;
-		sdf_object_pass.uniform_data.data_info[1] = max_steps;
-		sdf_object_pass.uniform_data.data_info[2] = uint32_t(render_mode);
-		sdf_object_pass.uniform_data.data_info[3] = 0;
-
-		sdf_object_pass.uniform_data.march_info[0] = Math::lerp(0.0008f, 0.003f, lod_factor);
-		sdf_object_pass.uniform_data.march_info[1] = 0.0005f;
-		sdf_object_pass.uniform_data.march_info[2] = 0.95f;
-		sdf_object_pass.uniform_data.march_info[3] = Math::lerp(1.0f, 4.0f, lod_factor);
-
-		RD::get_singleton()->buffer_update(sdf_object_pass.uniform_buffer, 0, sizeof(SDFObjectPass::UniformData), &sdf_object_pass.uniform_data);
-
-		RD::Uniform u_params;
-		u_params.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
-		u_params.binding = 0;
-		u_params.append_id(sdf_object_pass.uniform_buffer);
-
-		RD::Uniform u_int_buffer;
-		u_int_buffer.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		u_int_buffer.binding = 0;
-		u_int_buffer.append_id(int_buffer);
-
-		RD::Uniform u_float_buffer;
-		u_float_buffer.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
-		u_float_buffer.binding = 1;
-		u_float_buffer.append_id(float_buffer);
-
-		if (!draw_list_started) {
-			draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0);
-			RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline);
-			draw_list_started = true;
-		}
-
-		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 0, u_params), 0);
-		RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_int_buffer, u_float_buffer), 1);
-		RD::get_singleton()->draw_list_draw(draw_list, false, 1u, 3u);
 	}
 
-	if (draw_list_started) {
-		RD::get_singleton()->draw_list_end();
+	const uint32_t object_count = uint32_t(scene_object_int_data.size() / OBJECT_INT_STRIDE);
+	if (!has_scene_bounds || object_count == 0) {
+		return;
 	}
+
+	PackedByteArray shape_int_bytes = scene_shape_int_data.to_byte_array();
+	PackedByteArray shape_float_bytes = scene_shape_float_data.to_byte_array();
+	PackedByteArray object_int_bytes = scene_object_int_data.to_byte_array();
+	PackedByteArray object_float_bytes = scene_object_float_data.to_byte_array();
+	if (shape_int_bytes.is_empty() || shape_float_bytes.is_empty() || object_int_bytes.is_empty() || object_float_bytes.is_empty()) {
+		return;
+	}
+
+	const RID shape_int_buffer = RD::get_singleton()->storage_buffer_create(shape_int_bytes.size(), shape_int_bytes);
+	const RID shape_float_buffer = RD::get_singleton()->storage_buffer_create(shape_float_bytes.size(), shape_float_bytes);
+	const RID object_int_buffer = RD::get_singleton()->storage_buffer_create(object_int_bytes.size(), object_int_bytes);
+	const RID object_float_buffer = RD::get_singleton()->storage_buffer_create(object_float_bytes.size(), object_float_bytes);
+	if (shape_int_buffer.is_null() || shape_float_buffer.is_null() || object_int_buffer.is_null() || object_float_buffer.is_null()) {
+		if (shape_int_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(shape_int_buffer);
+		}
+		if (shape_float_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(shape_float_buffer);
+		}
+		if (object_int_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(object_int_buffer);
+		}
+		if (object_float_buffer.is_valid()) {
+			RD::get_singleton()->free_rid(object_float_buffer);
+		}
+		return;
+	}
+
+	const float lod_factor = CLAMP(nearest_depth / 80.0f, 0.0f, 1.0f);
+	int base_steps = 96;
+	int base_shadow_steps = 8;
+	switch (nearest_render_mode) {
+		case RSE::SDF_RENDER_MODE_STATIC:
+			base_steps = 128;
+			base_shadow_steps = 12;
+			break;
+		case RSE::SDF_RENDER_MODE_DYNAMIC:
+			base_steps = 96;
+			base_shadow_steps = 8;
+			break;
+		case RSE::SDF_RENDER_MODE_CHARACTER:
+			base_steps = 112;
+			base_shadow_steps = 10;
+			break;
+		default:
+			break;
+	}
+	const uint32_t max_steps = uint32_t(MAX(int(Math::lerp((float)base_steps, (float)MAX(base_steps / 2, 24), lod_factor)), 16));
+	const uint32_t max_shadow_steps = uint32_t(MAX(int(Math::lerp((float)base_shadow_steps, (float)MAX(base_shadow_steps / 2, 2), lod_factor)), 2));
+
+	_store_projection_matrix(view_projection, sdf_object_pass.uniform_data.view_projection);
+	_store_projection_matrix(inv_projection, sdf_object_pass.uniform_data.inv_projection);
+	RendererRD::MaterialStorage::store_transform(inv_view, sdf_object_pass.uniform_data.inv_view);
+	const Transform3D identity_xform(1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f);
+	RendererRD::MaterialStorage::store_transform(identity_xform, sdf_object_pass.uniform_data.object_to_world);
+	RendererRD::MaterialStorage::store_transform(identity_xform, sdf_object_pass.uniform_data.world_to_object);
+
+	const Vector3 scene_bmin = scene_bounds.position;
+	const Vector3 scene_bmax = scene_bounds.position + scene_bounds.size;
+	sdf_object_pass.uniform_data.bounds_min[0] = scene_bmin.x;
+	sdf_object_pass.uniform_data.bounds_min[1] = scene_bmin.y;
+	sdf_object_pass.uniform_data.bounds_min[2] = scene_bmin.z;
+	sdf_object_pass.uniform_data.bounds_min[3] = 0.0f;
+	sdf_object_pass.uniform_data.bounds_max[0] = scene_bmax.x;
+	sdf_object_pass.uniform_data.bounds_max[1] = scene_bmax.y;
+	sdf_object_pass.uniform_data.bounds_max[2] = scene_bmax.z;
+	sdf_object_pass.uniform_data.bounds_max[3] = 0.0f;
+
+	sdf_object_pass.uniform_data.data_info[0] = object_count;
+	sdf_object_pass.uniform_data.data_info[1] = max_steps;
+	sdf_object_pass.uniform_data.data_info[2] = uint32_t(nearest_render_mode);
+	sdf_object_pass.uniform_data.data_info[3] = max_shadow_steps;
+
+	sdf_object_pass.uniform_data.march_info[0] = Math::lerp(0.0008f, 0.003f, lod_factor);
+	sdf_object_pass.uniform_data.march_info[1] = 0.0005f;
+	sdf_object_pass.uniform_data.march_info[2] = 0.95f;
+	sdf_object_pass.uniform_data.march_info[3] = Math::lerp(1.0f, 4.0f, lod_factor);
+
+	RD::get_singleton()->buffer_update(sdf_object_pass.uniform_buffer, 0, sizeof(SDFObjectPass::UniformData), &sdf_object_pass.uniform_data);
+
+	RD::Uniform u_params;
+	u_params.uniform_type = RD::UNIFORM_TYPE_UNIFORM_BUFFER;
+	u_params.binding = 0;
+	u_params.append_id(sdf_object_pass.uniform_buffer);
+
+	RD::Uniform u_shape_int_buffer;
+	u_shape_int_buffer.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	u_shape_int_buffer.binding = 0;
+	u_shape_int_buffer.append_id(shape_int_buffer);
+
+	RD::Uniform u_shape_float_buffer;
+	u_shape_float_buffer.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	u_shape_float_buffer.binding = 1;
+	u_shape_float_buffer.append_id(shape_float_buffer);
+
+	RD::Uniform u_object_int_buffer;
+	u_object_int_buffer.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	u_object_int_buffer.binding = 2;
+	u_object_int_buffer.append_id(object_int_buffer);
+
+	RD::Uniform u_object_float_buffer;
+	u_object_float_buffer.uniform_type = RD::UNIFORM_TYPE_STORAGE_BUFFER;
+	u_object_float_buffer.binding = 3;
+	u_object_float_buffer.append_id(object_float_buffer);
+
+	RD::DrawListID draw_list = RD::get_singleton()->draw_list_begin(p_framebuffer, RD::DRAW_DEFAULT_ALL, Vector<Color>(), 1.0f, 0);
+	RD::get_singleton()->draw_list_bind_render_pipeline(draw_list, pipeline);
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 0, u_params), 0);
+	RD::get_singleton()->draw_list_bind_uniform_set(draw_list, uniform_set_cache->get_cache(shader, 1, u_shape_int_buffer, u_shape_float_buffer, u_object_int_buffer, u_object_float_buffer), 1);
+	RD::get_singleton()->draw_list_draw(draw_list, false, 1u, 3u);
+	RD::get_singleton()->draw_list_end();
+
+	RD::get_singleton()->free_rid(shape_int_buffer);
+	RD::get_singleton()->free_rid(shape_float_buffer);
+	RD::get_singleton()->free_rid(object_int_buffer);
+	RD::get_singleton()->free_rid(object_float_buffer);
 }
 
 void RenderForwardClustered::_render_scene(RenderDataRD *p_render_data, const Color &p_default_bg_color) {

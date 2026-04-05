@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="SDFShape3D" inherits="Node3D" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../class.xsd">
+	<brief_description>
+		Single 3D SDF primitive node used by [SDFObject3D].
+	</brief_description>
+	<description>
+		[SDFShape3D] represents one selected analytic SDF primitive and its parameters.
+		Add one or more [SDFShape3D] children under an [SDFObject3D] to build a composed object.
+		Operation, ordering, smoothness and layer masks are evaluated during SDF compilation.
+	</description>
+	<tutorials>
+	</tutorials>
+	<methods>
+		<method name="get_membership_layer_value" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="layer_number" type="int" />
+			<description>
+				Returns whether the given [param layer_number] (1 to 32) is enabled in [member membership_layers].
+			</description>
+		</method>
+		<method name="set_membership_layer_value">
+			<return type="void" />
+			<param index="0" name="layer_number" type="int" />
+			<param index="1" name="value" type="bool" />
+			<description>
+				Enables or disables a specific bit in [member membership_layers] for [param layer_number] (1 to 32).
+			</description>
+		</method>
+		<method name="get_affect_layer_value" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="layer_number" type="int" />
+			<description>
+				Returns whether the given [param layer_number] (1 to 32) is enabled in [member affect_layers].
+			</description>
+		</method>
+		<method name="set_affect_layer_value">
+			<return type="void" />
+			<param index="0" name="layer_number" type="int" />
+			<param index="1" name="value" type="bool" />
+			<description>
+				Enables or disables a specific bit in [member affect_layers] for [param layer_number] (1 to 32).
+			</description>
+		</method>
+	</methods>
+	<members>
+		<member name="shape_type" type="int" setter="set_shape_type" getter="get_shape_type" enum="SDFShape3D.SDFPrimitiveType" default="0">
+			Selects which primitive this node represents.
+		</member>
+		<member name="operation" type="int" setter="set_operation" getter="get_operation" enum="SDFShape3D.SDFOperation" default="0">
+			Shape-level CSG operation used while composing inside the parent [SDFObject3D].
+		</member>
+		<member name="operation_order" type="int" setter="set_operation_order" getter="get_operation_order" default="0">
+			Shape-level operation ordering value inside the parent object. Lower values are evaluated first.
+		</member>
+		<member name="render_mode_hint" type="int" setter="set_render_mode_hint" getter="get_render_mode_hint" default="0">
+			Per-shape render usage hint.
+		</member>
+		<member name="smoothness" type="float" setter="set_smoothness" getter="get_smoothness" default="0.15">
+			Blend radius used by smooth shape operations.
+		</member>
+		<member name="membership_layers" type="int" setter="set_membership_layers" getter="get_membership_layers" default="1">
+			Layer mask this shape belongs to for operation targeting.
+		</member>
+		<member name="affect_layers" type="int" setter="set_affect_layers" getter="get_affect_layers" default="4294967295">
+			Layer mask this shape can affect for non-union operations.
+		</member>
+		<member name="size" type="Vector3" setter="set_size" getter="get_size" default="Vector3(1, 1, 1)">
+			Size/extents parameter used by box-, prism-, ellipsoid- and plane-oriented primitives.
+		</member>
+		<member name="axis" type="Vector3" setter="set_axis" getter="get_axis" default="Vector3(0, 1, 0)">
+			Axis parameter used by primitives that require a direction reference.
+		</member>
+		<member name="radius" type="float" setter="set_radius" getter="get_radius" default="0.5">
+			Primary radius parameter.
+		</member>
+		<member name="secondary_radius" type="float" setter="set_secondary_radius" getter="get_secondary_radius" default="0.25">
+			Secondary radius parameter for primitives that require two radii.
+		</member>
+		<member name="height" type="float" setter="set_height" getter="get_height" default="1.0">
+			Height/length parameter for capsule-, cylinder-, cone- and cut variants.
+		</member>
+		<member name="thickness" type="float" setter="set_thickness" getter="get_thickness" default="0.1">
+			Thickness parameter for supported hollow/link variants.
+		</member>
+		<member name="angle" type="float" setter="set_angle" getter="get_angle" default="0.785398163">
+			Primary angle parameter for supported primitives.
+		</member>
+		<member name="angle2" type="float" setter="set_angle2" getter="get_angle2" default="0.523598776">
+			Secondary angle parameter for supported primitives.
+		</member>
+		<member name="roundness" type="float" setter="set_roundness" getter="get_roundness" default="0.1">
+			Roundness parameter for supported rounded primitives.
+		</member>
+		<member name="sdf_material_override" type="SDFMaterial3D" setter="set_sdf_material_override" getter="get_sdf_material_override">
+			Optional per-shape material override. When set, its albedo tint overrides the parent [SDFObject3D] material tint for this shape.
+		</member>
+		<member name="color" type="Color" setter="set_color" getter="get_color" default="Color(1, 1, 1, 1)">
+			Base shape color contribution.
+		</member>
+		<member name="opacity" type="float" setter="set_opacity" getter="get_opacity" default="1.0">
+			Opacity multiplier for this shape contribution.
+		</member>
+	</members>
+	<constants>
+		<constant name="SDF_PRIMITIVE_SPHERE" value="0" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_BOX" value="1" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_ROUNDED_BOX" value="2" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_TORUS" value="3" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_CAPPED_TORUS" value="4" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_LINK" value="5" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_CAPSULE" value="6" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_CYLINDER" value="7" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_CAPPED_CYLINDER" value="8" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_CONE" value="9" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_CAPPED_CONE" value="10" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_ROUND_CONE" value="11" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_PLANE" value="12" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_HEX_PRISM" value="13" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_TRI_PRISM" value="14" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_ELLIPSOID" value="15" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_CUT_SPHERE" value="16" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_CUT_HOLLOW_SPHERE" value="17" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_DEATH_STAR" value="18" enum="SDFPrimitiveType" />
+		<constant name="SDF_PRIMITIVE_SOLID_ANGLE" value="19" enum="SDFPrimitiveType" />
+		<constant name="SDF_OPERATION_UNION" value="0" enum="SDFOperation">
+			Unions this shape with the accumulated shape result.
+		</constant>
+		<constant name="SDF_OPERATION_SUBTRACT" value="1" enum="SDFOperation">
+			Subtracts this shape from the accumulated shape result.
+		</constant>
+		<constant name="SDF_OPERATION_INTERSECT" value="2" enum="SDFOperation">
+			Intersects this shape with the accumulated shape result.
+		</constant>
+		<constant name="SDF_OPERATION_SMOOTH_UNION" value="3" enum="SDFOperation">
+			Smoothly unions this shape with the accumulated shape result.
+		</constant>
+		<constant name="SDF_OPERATION_SMOOTH_SUBTRACT" value="4" enum="SDFOperation">
+			Smoothly subtracts this shape from the accumulated shape result.
+		</constant>
+		<constant name="SDF_OPERATION_SMOOTH_INTERSECT" value="5" enum="SDFOperation">
+			Smoothly intersects this shape with the accumulated shape result.
+		</constant>
+	</constants>
+</class>

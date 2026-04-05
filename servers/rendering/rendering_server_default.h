@@ -696,6 +696,7 @@ public:
 	FUNC2(sdf_object_set_bounds, RID, const AABB &)
 	FUNC2(sdf_object_set_material, RID, RID)
 	FUNC2(sdf_object_set_render_mode, RID, RSE::SDFRenderMode)
+	FUNC7(sdf_object_set_operation_data, RID, int, int, float, uint32_t, uint32_t, int)
 
 	/* VISIBILITY_NOTIFIER */
 

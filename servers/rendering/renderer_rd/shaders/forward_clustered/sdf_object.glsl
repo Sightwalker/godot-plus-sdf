@@ -49,9 +49,20 @@ layout(set = 1, binding = 1, std430) readonly buffer SDFFloatData {
 }
 sdf_float_data;
 
-const int SHAPE_INT_HEADER_SIZE = 2;
+layout(set = 1, binding = 2, std430) readonly buffer SDFObjectIntData {
+	int data[];
+}
+sdf_object_int_data;
+
+layout(set = 1, binding = 3, std430) readonly buffer SDFObjectFloatData {
+	float data[];
+}
+sdf_object_float_data;
+
 const int SHAPE_INT_STRIDE = 6;
 const int SHAPE_FLOAT_STRIDE = 32;
+const int OBJECT_INT_STRIDE = 8;
+const int OBJECT_FLOAT_STRIDE = 12;
 
 const int SDF_OP_UNION = 0;
 const int SDF_OP_SUBTRACT = 1;
@@ -59,6 +70,10 @@ const int SDF_OP_INTERSECT = 2;
 const int SDF_OP_SMOOTH_UNION = 3;
 const int SDF_OP_SMOOTH_SUBTRACT = 4;
 const int SDF_OP_SMOOTH_INTERSECT = 5;
+
+const int SDF_INSIDE_RENDER_DISCARD = 0;
+const int SDF_INSIDE_RENDER_EXIT_SURFACE = 1;
+const int SDF_INSIDE_RENDER_TWO_SIDED = 2;
 
 const int SDF_SHAPE_SPHERE = 0;
 const int SDF_SHAPE_BOX = 1;
@@ -101,10 +116,24 @@ struct ShapeData {
 	vec4 color;
 };
 
+struct ObjectData {
+	int shape_offset;
+	int shape_count;
+	int operation;
+	int render_mode;
+	int inside_render_mode;
+	uint membership_layers;
+	uint affect_layers;
+	float smoothness;
+	vec3 bounds_min;
+	vec3 bounds_max;
+};
+
 struct EvalResult {
 	float dist;
 	vec4 color;
 	uint layers;
+	int inside_mode;
 };
 
 float sd_sphere(vec3 p, float r) {
@@ -245,7 +274,7 @@ float op_smooth_intersect(float d_a, float d_b, float k) {
 
 ShapeData load_shape(uint shape_index) {
 	ShapeData s;
-	int i_base = SHAPE_INT_HEADER_SIZE + int(shape_index) * SHAPE_INT_STRIDE;
+	int i_base = int(shape_index) * SHAPE_INT_STRIDE;
 	int f_base = int(shape_index) * SHAPE_FLOAT_STRIDE;
 
 	s.shape_type = sdf_int_data.data[i_base + 0];
@@ -289,6 +318,32 @@ ShapeData load_shape(uint shape_index) {
 			sdf_float_data.data[f_base + 29]);
 
 	return s;
+}
+
+ObjectData load_object(uint object_index) {
+	ObjectData o;
+	int i_base = int(object_index) * OBJECT_INT_STRIDE;
+	int f_base = int(object_index) * OBJECT_FLOAT_STRIDE;
+
+	o.shape_offset = sdf_object_int_data.data[i_base + 0];
+	o.shape_count = sdf_object_int_data.data[i_base + 1];
+	o.operation = sdf_object_int_data.data[i_base + 2];
+	o.render_mode = sdf_object_int_data.data[i_base + 3];
+	o.membership_layers = uint(sdf_object_int_data.data[i_base + 4]);
+	o.affect_layers = uint(sdf_object_int_data.data[i_base + 5]);
+	o.inside_render_mode = clamp(sdf_object_int_data.data[i_base + 6], SDF_INSIDE_RENDER_DISCARD, SDF_INSIDE_RENDER_TWO_SIDED);
+
+	o.smoothness = sdf_object_float_data.data[f_base + 0];
+	o.bounds_min = vec3(
+			sdf_object_float_data.data[f_base + 4],
+			sdf_object_float_data.data[f_base + 5],
+			sdf_object_float_data.data[f_base + 6]);
+	o.bounds_max = vec3(
+			sdf_object_float_data.data[f_base + 8],
+			sdf_object_float_data.data[f_base + 9],
+			sdf_object_float_data.data[f_base + 10]);
+
+	return o;
 }
 
 float evaluate_shape_distance(vec3 p_object, ShapeData shape) {
@@ -369,17 +424,24 @@ float evaluate_shape_distance(vec3 p_object, ShapeData shape) {
 	return dist * max(min_scale, 1e-4);
 }
 
-EvalResult evaluate_object(vec3 p_object) {
+float sd_aabb(vec3 p, vec3 bmin, vec3 bmax) {
+	vec3 center = (bmin + bmax) * 0.5;
+	vec3 extents = max((bmax - bmin) * 0.5, vec3(1e-4));
+	return sd_box(p - center, extents);
+}
+
+EvalResult evaluate_object(ObjectData object_data, vec3 p_world) {
 	EvalResult result;
 	result.dist = 1e20;
 	result.color = vec4(1.0, 1.0, 1.0, 1.0);
 	result.layers = 0u;
+	result.inside_mode = SDF_INSIDE_RENDER_EXIT_SURFACE;
 
-	uint shape_count = sdf_uniforms.data_info.x;
-	for (uint shape_index = 0u; shape_index < shape_count; shape_index++) {
+	for (int local_shape_index = 0; local_shape_index < object_data.shape_count; local_shape_index++) {
+		uint shape_index = uint(object_data.shape_offset + local_shape_index);
 		ShapeData shape = load_shape(shape_index);
 		int operation = shape.operation;
-		if (shape_index == 0u && operation != SDF_OP_UNION && operation != SDF_OP_SMOOTH_UNION) {
+		if (local_shape_index == 0 && operation != SDF_OP_UNION && operation != SDF_OP_SMOOTH_UNION) {
 			operation = SDF_OP_UNION;
 		}
 
@@ -388,7 +450,7 @@ EvalResult evaluate_object(vec3 p_object) {
 			continue;
 		}
 
-		float d_shape = evaluate_shape_distance(p_object, shape);
+		float d_shape = evaluate_shape_distance(p_world, shape);
 		float d_prev = result.dist;
 		vec4 color_prev = result.color;
 		uint layers_prev = result.layers;
@@ -440,18 +502,106 @@ EvalResult evaluate_object(vec3 p_object) {
 	return result;
 }
 
-float map_distance(vec3 p_object) {
-	return evaluate_object(p_object).dist;
+EvalResult evaluate_scene(vec3 p_world) {
+	EvalResult result;
+	result.dist = 1e20;
+	result.color = vec4(1.0, 1.0, 1.0, 1.0);
+	result.layers = 0u;
+	result.inside_mode = SDF_INSIDE_RENDER_EXIT_SURFACE;
+
+	uint object_count = sdf_uniforms.data_info.x;
+	for (uint object_index = 0u; object_index < object_count; object_index++) {
+		ObjectData object_data = load_object(object_index);
+		if (object_data.shape_count <= 0) {
+			continue;
+		}
+
+		float object_bounds_dist = sd_aabb(p_world, object_data.bounds_min, object_data.bounds_max);
+		if ((object_data.operation == SDF_OP_UNION || object_data.operation == SDF_OP_SMOOTH_UNION) && object_bounds_dist > result.dist + max(object_data.smoothness, 0.0)) {
+			continue;
+		}
+
+		int operation = object_data.operation;
+		if (object_index == 0u && operation != SDF_OP_UNION && operation != SDF_OP_SMOOTH_UNION) {
+			operation = SDF_OP_UNION;
+		}
+
+		bool affects = operation == SDF_OP_UNION || operation == SDF_OP_SMOOTH_UNION || ((result.layers & object_data.affect_layers) != 0u);
+		if (!affects) {
+			continue;
+		}
+
+		EvalResult object_result = evaluate_object(object_data, p_world);
+		float d_object = object_result.dist;
+		float d_prev = result.dist;
+		vec4 color_prev = result.color;
+		uint layers_prev = result.layers;
+		int inside_prev = result.inside_mode;
+		float k = max(object_data.smoothness, 1e-4);
+		uint object_membership = object_data.membership_layers;
+
+		switch (operation) {
+			case SDF_OP_UNION: {
+				if (d_object < result.dist) {
+					result.color = object_result.color;
+					result.layers = object_membership;
+					result.inside_mode = object_data.inside_render_mode;
+				}
+				result.dist = min(result.dist, d_object);
+			} break;
+			case SDF_OP_SUBTRACT: {
+				result.dist = max(result.dist, -d_object);
+				result.color = color_prev;
+				result.layers = layers_prev;
+			} break;
+			case SDF_OP_INTERSECT: {
+				if (d_object > result.dist) {
+					result.color = object_result.color;
+					result.layers = object_membership;
+					result.inside_mode = object_data.inside_render_mode;
+				}
+				result.dist = max(result.dist, d_object);
+			} break;
+			case SDF_OP_SMOOTH_UNION: {
+				float h = clamp(0.5 + 0.5 * (d_object - d_prev) / k, 0.0, 1.0);
+				result.dist = op_smooth_union(d_prev, d_object, k);
+				result.color = mix(object_result.color, color_prev, h);
+				result.layers = (h < 0.5) ? object_membership : layers_prev;
+				result.inside_mode = (h < 0.5) ? object_data.inside_render_mode : inside_prev;
+			} break;
+			case SDF_OP_SMOOTH_SUBTRACT: {
+				float h = clamp(0.5 - 0.5 * (d_object + d_prev) / k, 0.0, 1.0);
+				result.dist = op_smooth_subtract(d_prev, d_object, k);
+				result.color = mix(color_prev, object_result.color, h);
+				result.layers = layers_prev;
+			} break;
+			case SDF_OP_SMOOTH_INTERSECT: {
+				float h = clamp(0.5 - 0.5 * (d_object - d_prev) / k, 0.0, 1.0);
+				result.dist = op_smooth_intersect(d_prev, d_object, k);
+				result.color = mix(object_result.color, color_prev, h);
+				result.layers = (h < 0.5) ? object_membership : layers_prev;
+				result.inside_mode = (h < 0.5) ? object_data.inside_render_mode : inside_prev;
+			} break;
+			default: {
+			}
+		}
+	}
+
+	return result;
 }
 
-vec3 calculate_normal(vec3 p_object) {
+float map_distance(vec3 p_world) {
+	return evaluate_scene(p_world).dist;
+}
+
+vec3 calculate_normal(vec3 p_world) {
 	const float eps = 0.0008;
 	const vec2 e = vec2(1.0, -1.0) * 0.5773;
 	return normalize(
-			e.xyy * map_distance(p_object + e.xyy * eps) +
-			e.yyx * map_distance(p_object + e.yyx * eps) +
-			e.yxy * map_distance(p_object + e.yxy * eps) +
-			e.xxx * map_distance(p_object + e.xxx * eps));
+			e.xyy * map_distance(p_world + e.xyy * eps) +
+			e.yyx * map_distance(p_world + e.yyx * eps) +
+			e.yxy * map_distance(p_world + e.yxy * eps) +
+			e.xxx * map_distance(p_world + e.xxx * eps));
 }
 
 bool ray_box_intersection(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float tmin, out float tmax) {
@@ -463,6 +613,33 @@ bool ray_box_intersection(vec3 ro, vec3 rd, vec3 bmin, vec3 bmax, out float tmin
 	tmin = max(max(t_small.x, t_small.y), t_small.z);
 	tmax = min(min(t_big.x, t_big.y), t_big.z);
 	return tmax >= max(tmin, 0.0);
+}
+
+float soft_shadow_trace(vec3 ro, vec3 rd, float tmax, float hit_epsilon, int max_steps) {
+	float shadow = 1.0;
+	float travel = max(hit_epsilon * 2.0, 0.01);
+
+	const float softness = 8.0;
+	const float min_step = 0.01;
+	const float max_step = 0.4;
+	const int SHADOW_LOOP_MAX = 12;
+	int steps = clamp(max_steps, 0, SHADOW_LOOP_MAX);
+
+	for (int i = 0; i < SHADOW_LOOP_MAX; i++) {
+		if (i >= steps || travel > tmax) {
+			break;
+		}
+
+		float dist = abs(map_distance(ro + rd * travel));
+		if (dist <= hit_epsilon) {
+			return 0.0;
+		}
+
+		shadow = min(shadow, softness * dist / max(travel, 1e-4));
+		travel += clamp(dist * 0.8, min_step, max_step);
+	}
+
+	return clamp(shadow, 0.0, 1.0);
 }
 
 void main() {
@@ -478,12 +655,9 @@ void main() {
 	vec3 ray_origin_world = sdf_uniforms.inv_view[3].xyz;
 	vec3 ray_dir_world = normalize((sdf_uniforms.inv_view * vec4(dir_view, 0.0)).xyz);
 
-	vec3 ray_origin_object = (sdf_uniforms.world_to_object * vec4(ray_origin_world, 1.0)).xyz;
-	vec3 ray_dir_object = normalize((sdf_uniforms.world_to_object * vec4(ray_dir_world, 0.0)).xyz);
-
 	float t_near;
 	float t_far;
-	if (!ray_box_intersection(ray_origin_object, ray_dir_object, sdf_uniforms.bounds_min.xyz, sdf_uniforms.bounds_max.xyz, t_near, t_far)) {
+	if (!ray_box_intersection(ray_origin_world, ray_dir_world, sdf_uniforms.bounds_min.xyz, sdf_uniforms.bounds_max.xyz, t_near, t_far)) {
 		discard;
 	}
 
@@ -494,19 +668,40 @@ void main() {
 	float step_scale = sdf_uniforms.march_info.z;
 	float max_step = sdf_uniforms.march_info.w;
 	int max_steps = int(sdf_uniforms.data_info.y);
+	int max_shadow_steps = int(sdf_uniforms.data_info.w);
 
 	EvalResult result;
+	float start_eps = hit_epsilon * (1.0 + travel * 0.01);
+	result = evaluate_scene(ray_origin_world + ray_dir_world * travel);
+	if (result.dist < -start_eps && result.inside_mode == SDF_INSIDE_RENDER_DISCARD) {
+		discard;
+	}
+	int inside_mode = result.inside_mode;
+
 	bool hit = false;
 	for (int i = 0; i < max_steps; i++) {
-		vec3 p_object = ray_origin_object + ray_dir_object * travel;
-		result = evaluate_object(p_object);
+		vec3 p_world = ray_origin_world + ray_dir_world * travel;
+		result = evaluate_scene(p_world);
 		float eps = hit_epsilon * (1.0 + travel * 0.01);
-		if (result.dist <= eps) {
+		float abs_dist = abs(result.dist);
+		if (abs_dist <= eps) {
+			if (result.dist < -eps && result.inside_mode == SDF_INSIDE_RENDER_DISCARD) {
+				discard;
+			}
+			inside_mode = result.inside_mode;
 			hit = true;
 			break;
 		}
 
-		float march_step = clamp(result.dist * step_scale, min_step, max_step);
+		float march_distance = result.dist;
+		if (march_distance < 0.0) {
+			if (result.inside_mode == SDF_INSIDE_RENDER_DISCARD) {
+				discard;
+			}
+			march_distance = abs(march_distance);
+		}
+
+		float march_step = clamp(march_distance * step_scale, min_step, max_step);
 		travel += march_step;
 		if (travel > max_travel) {
 			break;
@@ -517,8 +712,7 @@ void main() {
 		discard;
 	}
 
-	vec3 hit_object = ray_origin_object + ray_dir_object * travel;
-	vec3 hit_world = (sdf_uniforms.object_to_world * vec4(hit_object, 1.0)).xyz;
+	vec3 hit_world = ray_origin_world + ray_dir_world * travel;
 	vec4 hit_clip = sdf_uniforms.view_projection * vec4(hit_world, 1.0);
 	if (hit_clip.w <= 0.0) {
 		discard;
@@ -531,16 +725,28 @@ void main() {
 	gl_FragDepth = clamp(depth, 0.0, 1.0);
 
 	float alpha = clamp(result.color.a, 0.0, 1.0);
-	if (alpha < 0.995) {
+	if (alpha <= 0.001) {
 		discard;
 	}
 
-	vec3 normal_object = calculate_normal(hit_object);
-	vec3 normal_world = normalize(transpose(mat3(sdf_uniforms.world_to_object)) * normal_object);
+	vec3 normal_world = calculate_normal(hit_world);
+	if (inside_mode == SDF_INSIDE_RENDER_TWO_SIDED && dot(normal_world, ray_dir_world) > 0.0) {
+		normal_world = -normal_world;
+	}
 
 	vec3 light_dir = normalize(vec3(0.35, 0.78, 0.21));
 	float ndotl = max(dot(normal_world, light_dir), 0.0);
-	vec3 color = result.color.rgb * (0.18 + 0.82 * ndotl);
+	float shadow = 1.0;
+	if (max_shadow_steps > 0 && ndotl > 0.0001) {
+		vec3 shadow_origin = hit_world + normal_world * max(hit_epsilon * 6.0, 0.003);
+		float shadow_near;
+		float shadow_far;
+		if (ray_box_intersection(shadow_origin, light_dir, sdf_uniforms.bounds_min.xyz, sdf_uniforms.bounds_max.xyz, shadow_near, shadow_far)) {
+			shadow = soft_shadow_trace(shadow_origin, light_dir, shadow_far, hit_epsilon * 1.5, max_shadow_steps);
+		}
+	}
+
+	vec3 color = result.color.rgb * (0.18 + 0.82 * (ndotl * shadow));
 
 	frag_color = vec4(color, 1.0);
 }

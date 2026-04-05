@@ -509,6 +509,7 @@ public:
 	virtual void sdf_object_set_bounds(RID p_sdf_object, const AABB &p_bounds) = 0;
 	virtual void sdf_object_set_material(RID p_sdf_object, RID p_material) = 0;
 	virtual void sdf_object_set_render_mode(RID p_sdf_object, RSE::SDFRenderMode p_mode) = 0;
+	virtual void sdf_object_set_operation_data(RID p_sdf_object, int p_operation, int p_operation_order, float p_smoothness, uint32_t p_membership_layers, uint32_t p_affect_layers, int p_inside_render_mode) = 0;
 
 	/* VISIBILITY NOTIFIER API */
 
